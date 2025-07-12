@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  # Ollama service with Gemma model
+  # Ollama service (Optional but recommended for agent intelligence)
   ollama:
     image: ollama/ollama:latest
     container_name: ollama
@@ -17,39 +17,44 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 60s
     deploy:
       resources:
         reservations:
           devices:
             - driver: nvidia
               count: 1
-              capabilities: [gpu]
+              capabilities: [gpu] # Reserve GPU if available
 
   # Initialize Ollama models
   ollama-init:
     image: ollama/ollama:latest
+    container_name: ollama-init
     depends_on:
-      - ollama
+      ollama:
+        condition: service_healthy
     volumes:
       - ./scripts:/scripts
-    entrypoint: ["/bin/sh", "/scripts/init-ollama.sh"]
+    entrypoint: ["/bin/sh", "-c", "sleep 15 && /scripts/init-ollama.sh"]
     restart: "no"
+    environment:
+      - OLLAMA_HOST=ollama:11434
 
-  # IoT Data Agent
+  # IoT Data Agent (Simulated Temperature & Humidity)
   iot-agent:
     build:
       context: ./iot-agent
       dockerfile: Dockerfile
     container_name: iot-agent
     ports:
-      - "8001:8000"
+      - "8001:8000" # Expose agent's FastAPI port
     depends_on:
-      - ollama
+      ollama:
+        condition: service_healthy # Agent needs Ollama for LLM interactions
     environment:
       - OLLAMA_URL=http://ollama:11434
-      - IOT_BLOG_URL=https://dhirajpatra.blogspot.com/2023/08/iot-real-time-data-analysis.html
     volumes:
-      - ./iot-agent:/app
+      - ./iot-agent:/app # Mount source code for development
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -57,19 +62,20 @@ services:
       timeout: 10s
       retries: 3
 
-  # Weather Agent
+  # Weather Agent (City Weather)
   weather-agent:
     build:
       context: ./weather-agent
       dockerfile: Dockerfile
     container_name: weather-agent
     ports:
-      - "8002:8000"
+      - "8002:8000" # Expose agent's FastAPI port
     depends_on:
-      - ollama
+      ollama:
+        condition: service_healthy
     environment:
       - OLLAMA_URL=http://ollama:11434
-      - WEATHER_API_KEY=${WEATHER_API_KEY}
+      - WEATHER_API_KEY=${WEATHER_API_KEY} # IMPORTANT: Define this in a .env file at the project root
     volumes:
       - ./weather-agent:/app
     restart: unless-stopped
@@ -86,10 +92,12 @@ services:
       dockerfile: Dockerfile
     container_name: api-gateway
     ports:
-      - "8000:8000"
+      - "8000:8000" # Main entry point for dashboard and external calls
     depends_on:
-      - iot-agent
-      - weather-agent
+      iot-agent:
+        condition: service_healthy
+      weather-agent:
+        condition: service_healthy
     environment:
       - IOT_AGENT_URL=http://iot-agent:8000
       - WEATHER_AGENT_URL=http://weather-agent:8000
@@ -102,52 +110,20 @@ services:
       timeout: 10s
       retries: 3
 
-  # Web Dashboard
+  # Web Dashboard (using a simple Nginx server to serve static files)
   dashboard:
     build:
       context: ./dashboard
       dockerfile: Dockerfile
     container_name: dashboard
     ports:
-      - "3000:3000"
-    depends_on:
-      - api-gateway
-    environment:
-      - REACT_APP_API_URL=http://localhost:8000
+      - "3000:80" # Map host port 3000 to Nginx default port 80
     volumes:
-      - ./dashboard:/app
-      - /app/node_modules
-    restart: unless-stopped
-
-  # Redis for caching
-  redis:
-    image: redis:7-alpine
-    container_name: redis
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    restart: unless-stopped
-
-  # PostgreSQL for storing agent interactions
-  postgres:
-    image: postgres:15-alpine
-    container_name: postgres
-    ports:
-      - "5432:5432"
-    environment:
-      - POSTGRES_DB=adk_agents
-      - POSTGRES_USER=adk_user
-      - POSTGRES_PASSWORD=adk_password
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+      - ./dashboard:/usr/share/nginx/html:ro # Mount dashboard files to Nginx web root
     restart: unless-stopped
 
 volumes:
-  ollama_data:
-  redis_data:
-  postgres_data:
+  ollama_data: # Still useful for Ollama model persistence
 
 networks:
   default:

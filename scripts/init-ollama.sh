@@ -10,7 +10,7 @@ done
 echo "Ollama is ready! Pulling Gemma models..."
 
 # Pull Gemma 3 model (smaller, faster)
-echo "Pulling gemma3:9b model..."
+echo "Pulling gemma2:2b model..."
 curl -X POST http://ollama:11434/api/pull \
   -H "Content-Type: application/json" \
   -d '{"name": "gemma3:9b"}'
