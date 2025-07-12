@@ -1,0 +1,154 @@
+version: '3.8'
+
+services:
+  # Ollama service with Gemma model
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  # Initialize Ollama models
+  ollama-init:
+    image: ollama/ollama:latest
+    depends_on:
+      - ollama
+    volumes:
+      - ./scripts:/scripts
+    entrypoint: ["/bin/sh", "/scripts/init-ollama.sh"]
+    restart: "no"
+
+  # IoT Data Agent
+  iot-agent:
+    build:
+      context: ./iot-agent
+      dockerfile: Dockerfile
+    container_name: iot-agent
+    ports:
+      - "8001:8000"
+    depends_on:
+      - ollama
+    environment:
+      - OLLAMA_URL=http://ollama:11434
+      - IOT_BLOG_URL=https://dhirajpatra.blogspot.com/2023/08/iot-real-time-data-analysis.html
+    volumes:
+      - ./iot-agent:/app
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Weather Agent
+  weather-agent:
+    build:
+      context: ./weather-agent
+      dockerfile: Dockerfile
+    container_name: weather-agent
+    ports:
+      - "8002:8000"
+    depends_on:
+      - ollama
+    environment:
+      - OLLAMA_URL=http://ollama:11434
+      - WEATHER_API_KEY=${WEATHER_API_KEY}
+    volumes:
+      - ./weather-agent:/app
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # API Gateway
+  api-gateway:
+    build:
+      context: ./api-gateway
+      dockerfile: Dockerfile
+    container_name: api-gateway
+    ports:
+      - "8000:8000"
+    depends_on:
+      - iot-agent
+      - weather-agent
+    environment:
+      - IOT_AGENT_URL=http://iot-agent:8000
+      - WEATHER_AGENT_URL=http://weather-agent:8000
+    volumes:
+      - ./api-gateway:/app
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Web Dashboard
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+    container_name: dashboard
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api-gateway
+    environment:
+      - REACT_APP_API_URL=http://localhost:8000
+    volumes:
+      - ./dashboard:/app
+      - /app/node_modules
+    restart: unless-stopped
+
+  # Redis for caching
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+  # PostgreSQL for storing agent interactions
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgres
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=adk_agents
+      - POSTGRES_USER=adk_user
+      - POSTGRES_PASSWORD=adk_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    restart: unless-stopped
+
+volumes:
+  ollama_data:
+  redis_data:
+  postgres_data:
+
+networks:
+  default:
+    driver: bridge
