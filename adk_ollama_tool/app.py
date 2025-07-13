@@ -1,166 +1,104 @@
 # adk_ollama_tool/app.py
-from fastapi import FastAPI, HTTPException, Request # <--- ADDED 'Request' here
-from fastapi.responses import HTMLResponse
-import httpx # Correct: For making HTTP requests to Ollama and MCP server
 import os
-import json
-import asyncio
+import uvicorn
+from fastapi import FastAPI, HTTPException # HTTPException is still useful for error responses
+from dotenv import load_dotenv
+
+# ADK imports
+from adk.agent_client import AgentClient
+from adk.message import MessageBuilder, Message # Import Message for type hinting
+
+# Import your agents from the new 'agents' directory
+from agents.smart_home_agent import SmartHomeAgent
+from agents.weather_agent import WeatherAgent
+
+# Import your tools from the new 'tools' directory
+from tools.ollama_tool import OllamaTool
+from tools.mcp_tool import MCPTool
+from tools.weather_api_tool import WeatherAPITool
+
+# Load environment variables from .env file (if it exists).
+# This is crucial for your API keys and service URLs.
+load_dotenv()
 
 app = FastAPI()
+agent_client = AgentClient()
 
-# Get URLs from environment variables
-OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://ollama:11434")
-MCP_SERVER_URL = os.environ.get("MCP_SERVER_URL", "http://mcp_server:4000")
+# --- Initialize Tools ---
+# These tools encapsulate the logic for interacting with external services.
+# They are passed to agents or can be used directly by the application.
+ollama_tool = OllamaTool(
+    ollama_base_url=os.environ.get("OLLAMA_BASE_URL", "http://ollama:11434")
+)
+mcp_tool = MCPTool(
+    mcp_server_url=os.environ.get("MCP_SERVER_URL", "http://mcp_server:4000")
+)
+weather_api_tool = WeatherAPITool(
+    api_key=os.environ.get("OPENWEATHER_API_KEY") # Ensure this ENV VAR is set in docker-compose or .env
+)
 
-# Initialize HTTP client for asynchronous requests
-# Using a global client for better performance
-client = httpx.AsyncClient()
+# --- Register Agents ---
+# Each agent needs a unique ID. You pass the necessary tools or initial state to them.
+agent_client.register_agent(SmartHomeAgent(agent_id="smart_home_agent", initial_state={"temperature": 25.0, "light": "on"}))
+agent_client.register_agent(WeatherAgent(agent_id="weather_agent", weather_tool=weather_api_tool))
 
-@app.get("/", response_class=HTMLResponse)
+
+# --- Mount ADK Client's Endpoints ---
+# This makes the ADK client's internal endpoints accessible at /adk/v1.
+# This is how external systems (or other agents in a more complex setup) can communicate.
+app.include_router(agent_client.router, prefix="/adk/v1")
+
+
+# --- Basic Health Check Endpoint ---
+@app.get("/")
 async def read_root():
-    """
-    Root endpoint for a simple HTML response or health check.
-    """
-    html_content = """
-    <html>
-        <head>
-            <title>ADK Ollama Tool</title>
-        </head>
-        <body>
-            <h1>ADK Ollama Tool is running!</h1>
-            <p>Try these endpoints:</p>
-            <ul>
-                <li><a href="/chat?prompt=hello">/chat?prompt=hello</a> - Interact with Ollama (gemma2:2b)</li>
-                <li><a href="/math?num1=5&num2=3">/math?num1=5&num2=3</a> - Interact with MCP Server</li>
-                <li><a href="/sse_test">/sse_test</a> - Test SSE from MCP Server</li>
-            </ul>
-        </body>
-    </html>
-    """
-    return HTMLResponse(content=html_content, status_code=200)
+    return {"message": "ADK Multi-Agent Application is running and ready for interaction!"}
 
-@app.get("/chat")
-async def chat_with_ollama(prompt: str = "tell me a short story"):
-    """
-    Endpoint to interact with the Ollama service.
-    Sends a prompt and returns the LLM's response.
-    """
-    model_name = "gemma2:2b" # Ensure this model is pulled by your Ollama service
 
-    payload = {
-        "model": model_name,
-        "prompt": prompt,
-        "stream": False # Set to True for streaming responses
-    }
+# --- Example Endpoints for Direct Interaction (for easy testing via browser/curl) ---
+# These endpoints allow you to directly send messages to specific agents
+# without needing to understand the full ADK message format.
 
-    try:
-        ollama_url = f"{OLLAMA_BASE_URL}/api/generate"
-        print(f"Sending prompt '{prompt}' to Ollama at {ollama_url}")
-        response = await client.post(ollama_url, json=payload, timeout=300.0) # Increased timeout
-        response.raise_for_status() # Raise an exception for HTTP errors (4xx or 5xx)
-
-        data = response.json()
-        print(f"Received response from Ollama: {data}")
-
-        if "response" in data:
-            return {"model": model_name, "prompt": prompt, "response": data["response"]}
-        else:
-            # If Ollama's API changes or provides a different structure
-            return {"error": "Unexpected response format from Ollama", "details": data}
-
-    except httpx.RequestError as exc:
-        print(f"An error occurred while requesting Ollama: {exc}")
-        raise HTTPException(status_code=500, detail=f"Could not connect to Ollama service: {exc}")
-    except httpx.HTTPStatusError as exc:
-        print(f"HTTP error from Ollama: {exc.response.status_code} - {exc.response.text}")
-        raise HTTPException(status_code=exc.response.status_code, detail=f"Ollama service responded with an error: {exc.response.text}")
-    except Exception as e:
-        print(f"An unexpected error occurred: {e}")
-        raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {e}")
-
-@app.get("/math")
-async def get_math_result(num1: int, num2: int):
+@app.get("/ask_smart_home")
+async def ask_smart_home(query: str = "What's the temperature?"):
     """
-    Endpoint to interact with the MCP server for a calculation.
+    Example endpoint to send a query to the Smart Home Agent.
     """
-    payload = {
-        "num1": num1,
-        "num2": num2
-    }
-    try:
-        mcp_url = f"{MCP_SERVER_URL}/calculate"
-        print(f"Sending math request to MCP server at {mcp_url} with {payload}")
-        response = await client.post(mcp_url, json=payload, timeout=60.0)
-        response.raise_for_status()
-        result = response.json()
-        print(f"Received result from MCP server: {result}")
-        return {"operation": "sum", "input": payload, "mcp_response": result}
-    except httpx.RequestError as exc:
-        print(f"An error occurred while requesting MCP server: {exc}")
-        raise HTTPException(status_code=500, detail=f"Could not connect to MCP server: {exc}")
-    except httpx.HTTPStatusError as exc:
-        print(f"HTTP error from MCP server: {exc.response.status_code} - {exc.response.text}")
-        raise HTTPException(status_code=exc.response.status_code, detail=f"MCP server responded with an error: {exc.response.text}")
-    except Exception as e:
-        print(f"An unexpected error occurred: {e}")
-        raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {e}")
+    # Build an ADK message to send to the smart_home_agent
+    message = MessageBuilder().text_message(query).add_sender_id("user_client").add_recipient_id("smart_home_agent").build()
+    
+    # Send the message and get the response from the agent
+    response_message: Message = await agent_client.send_message(message)
+    
+    return {"query_sent": query, "smart_home_agent_response": response_message.text()}
 
-@app.get("/sse_test", response_class=HTMLResponse)
-async def sse_test_page():
+@app.get("/get_weather")
+async def get_weather_data(city: str = "Mumbai"):
     """
-    A simple HTML page to test the SSE endpoint from MCP server.
+    Example endpoint to send a query to the Weather Agent.
     """
-    return """
-    <html>
-        <head>
-            <title>SSE Test</title>
-        </head>
-        <body>
-            <h1>SSE from MCP Server</h1>
-            <div id="events"></div>
-            <script>
-                const eventSource = new EventSource("/internal_sse_proxy");
-                eventSource.onmessage = function(event) {
-                    const newElement = document.createElement("p");
-                    newElement.textContent = `Event: ${event.data}`;
-                    document.getElementById("events").appendChild(newElement);
-                };
-                eventSource.onerror = function(err) {
-                    console.error("EventSource failed:", err);
-                    eventSource.close();
-                };
-            </script>
-            <p>Check browser console for SSE errors.</p>
-        </body>
-    </html>
-    """
+    # Build an ADK message to send to the weather_agent
+    message = MessageBuilder().text_message(f"What's the weather in {city}?").add_sender_id("user_client").add_recipient_id("weather_agent").build()
+    
+    # Send the message and get the response from the agent
+    response_message: Message = await agent_client.send_message(message)
+    
+    return {"city_queried": city, "weather_agent_response": response_message.text()}
 
-@app.get("/internal_sse_proxy")
-async def internal_sse_proxy(request: Request):
-    """
-    Proxies the SSE stream from MCP server to the ADK app client.
-    This is necessary because client-side EventSource might not directly
-    access a service URL (like mcp_server:4000)
-    """
-    async def sse_events():
-        try:
-            async with client.stream("GET", f"{MCP_SERVER_URL}/sse", timeout=None) as response:
-                response.raise_for_status()
-                async for chunk in response.aiter_bytes():
-                    if await request.is_disconnected():
-                        print("Client disconnected from ADK SSE proxy.")
-                        break
-                    yield chunk
-        except httpx.RequestError as exc:
-            print(f"SSE Proxy: An error occurred while connecting to MCP server: {exc}")
-        except httpx.HTTPStatusError as exc:
-            print(f"SSE Proxy: HTTP error from MCP server: {exc.response.status_code} - {exc.response.text}")
-        except Exception as e:
-            print(f"SSE Proxy: An unexpected error occurred: {e}")
+# You can also add endpoints to directly call your tools for testing purposes,
+# though typically agents would use these tools internally.
+@app.post("/direct_call_ollama")
+async def direct_call_ollama(prompt: str):
+    """Directly calls the OllamaTool, bypassing agent routing."""
+    response = await ollama_tool.chat_with_ollama(prompt)
+    return {"prompt": prompt, "ollama_tool_response": response}
 
-    return StreamingResponse(sse_events(), media_type="text/event-stream")
+@app.post("/direct_call_mcp")
+async def direct_call_mcp(num1: int, num2: int):
+    """Directly calls the MCPTool, bypassing agent routing."""
+    response = await mcp_tool.calculate(num1, num2)
+    return {"numbers": [num1, num2], "mcp_tool_response": response}
 
 
 if __name__ == "__main__":
-    import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
