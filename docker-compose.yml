@@ -7,7 +7,7 @@ services:
     ports:
       - "11434:11434"
     volumes:
-      - .:/app
+      # - .:/app
       - ./ollama_data:/root/.ollama  # ✅ Changed from direct /root path to local folder
       - ./ollama_models:/root/.ollama/models
     environment:

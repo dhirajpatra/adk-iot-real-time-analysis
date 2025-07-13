@@ -1,6 +1,4 @@
-# Dockerfile.adk - For the ADK Python Application
-# Assumes the ADK application is a Python application with a requirements.txt
-
+# adk_ollama_tool/Dockerfile.adk
 FROM python:3.11-slim
 
 WORKDIR /app
@@ -10,11 +8,11 @@ COPY requirements.txt ./
 
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the rest of the application code
+# Copy the rest of the application code (including app.py)
 COPY . .
 
-# Expose the default ADK web UI port
-EXPOSE 8000
+# Expose the port the ADK app listens on
+EXPOSE 8000 
 
-# Command to launch the ADK agents with the web UI
-CMD ["adk", "web"]
+# Command to run the Python ADK web application using Uvicorn
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
