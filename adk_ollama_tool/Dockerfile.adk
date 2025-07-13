@@ -1,0 +1,20 @@
+# Dockerfile.adk - For the ADK Python Application
+# Assumes the ADK application is a Python application with a requirements.txt
+
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Copy requirements.txt first to leverage Docker cache
+COPY requirements.txt ./
+
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy the rest of the application code
+COPY . .
+
+# Expose the default ADK web UI port
+EXPOSE 8000
+
+# Command to launch the ADK agents with the web UI
+CMD ["adk", "web"]

@@ -1,0 +1,8 @@
+# adk_ollama_tool/requirements.txt
+google-adk
+litellm
+# Add any other specific Python libraries your adk-ollama-tool project uses
+# For example, if it uses requests, numpy, pandas, etc., list them here:
+# requests
+# numpy
+# pandas

@@ -1,130 +1,67 @@
-version: '3.8'
-
 services:
-  # Ollama service (Optional but recommended for agent intelligence)
   ollama:
-    image: ollama/ollama:latest
+    # Use your custom Dockerfile to build the Ollama service
+    build: 
+      context: ./ollama_server
     container_name: ollama
     ports:
       - "11434:11434"
     volumes:
-      - ollama_data:/root/.ollama
+      - .:/app
+      - ./ollama_data:/root/.ollama  # ✅ Changed from direct /root path to local folder
+      - ./ollama_models:/root/.ollama/models
     environment:
       - OLLAMA_HOST=0.0.0.0
     restart: unless-stopped
     healthcheck:
+      # Keep the health check, but give it more time to start up and pull the model
       test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
-    deploy:
+      interval: 60s
+      timeout: 15s
+      retries: 5
+      start_period: 120s
+    deploy: # for laptop nvidia GPU support if not available comment out
       resources:
         reservations:
           devices:
             - driver: nvidia
               count: 1
-              capabilities: [gpu] # Reserve GPU if available
+              capabilities: [gpu]
 
-  # Initialize Ollama models
-  ollama-init:
-    image: ollama/ollama:latest
-    container_name: ollama-init
+  mcp_server:
+    build:
+      context: ./mcp_server
+      dockerfile: Dockerfile.mcp
+    container_name: mcp_server
+    ports:
+      - "4000:4000"
     depends_on:
+      # MCP server needs Ollama to be initialized to use the models
       ollama:
         condition: service_healthy
-    volumes:
-      - ./scripts:/scripts
-    entrypoint: ["/bin/sh", "-c", "sleep 15 && /scripts/init-ollama.sh"]
-    restart: "no"
-    environment:
-      - OLLAMA_HOST=ollama:11434
-
-  # IoT Data Agent (Simulated Temperature & Humidity)
-  iot-agent:
-    build:
-      context: ./iot-agent
-      dockerfile: Dockerfile
-    container_name: iot-agent
-    ports:
-      - "8001:8000" # Expose agent's FastAPI port
-    depends_on:
-      ollama:
-        condition: service_healthy # Agent needs Ollama for LLM interactions
-    environment:
-      - OLLAMA_URL=http://ollama:11434
-    volumes:
-      - ./iot-agent:/app # Mount source code for development
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
 
-  # Weather Agent (City Weather)
-  weather-agent:
+  adk_app:
     build:
-      context: ./weather-agent
-      dockerfile: Dockerfile
-    container_name: weather-agent
+      context: ./adk_ollama_tool
+      dockerfile: Dockerfile.adk
+    container_name: adk_app
     ports:
-      - "8002:8000" # Expose agent's FastAPI port
+      - "8000:8000"
+    environment:
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - MCP_SERVER_URL=http://mcp_server:4000
     depends_on:
+      # ADK app needs Ollama to be initialized and MCP server to be running
       ollama:
         condition: service_healthy
-    environment:
-      - OLLAMA_URL=http://ollama:11434
-      - WEATHER_API_KEY=${WEATHER_API_KEY} # IMPORTANT: Define this in a .env file at the project root
-    volumes:
-      - ./weather-agent:/app
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-  # API Gateway
-  api-gateway:
-    build:
-      context: ./api-gateway
-      dockerfile: Dockerfile
-    container_name: api-gateway
-    ports:
-      - "8000:8000" # Main entry point for dashboard and external calls
-    depends_on:
-      iot-agent:
-        condition: service_healthy
-      weather-agent:
-        condition: service_healthy
-    environment:
-      - IOT_AGENT_URL=http://iot-agent:8000
-      - WEATHER_AGENT_URL=http://weather-agent:8000
-    volumes:
-      - ./api-gateway:/app
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-  # Web Dashboard (using a simple Nginx server to serve static files)
-  dashboard:
-    build:
-      context: ./dashboard
-      dockerfile: Dockerfile
-    container_name: dashboard
-    ports:
-      - "3000:80" # Map host port 3000 to Nginx default port 80
-    volumes:
-      - ./dashboard:/usr/share/nginx/html:ro # Mount dashboard files to Nginx web root
+      mcp_server:
+        condition: service_started # ADK app just needs MCP to be running
     restart: unless-stopped
 
 volumes:
-  ollama_data: # Still useful for Ollama model persistence
-
-networks:
-  default:
-    driver: bridge
+  ollama_data:
+    driver: local
+  ollama_models:
+    driver: local
+  
