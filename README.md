@@ -43,6 +43,10 @@ This application consists of multiple specialized agents working together to pro
          └─────────────────┘
 ```
 
+![Architecture](images/architecture.jpg)
+![Primary Not accurate though](images/Smart_Home_MultiAgent_Architecture.png)
+
+
 ## 🚀 Quick Start
 
 ### Prerequisites

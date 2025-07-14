@@ -1,7 +1,7 @@
 # adk_ollama_tool/requirements.txt
-google-adk # Essential for the ADK framework
+google-adk
+litellm
 fastapi
 uvicorn[standard]
 httpx
-litellm   # Useful for abstracting LLM calls, keep if you plan advanced LLM integrations
 python-dotenv # For loading environment variables (like API keys) from a .env file

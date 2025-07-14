@@ -1,32 +1,30 @@
 # adk_ollama_tool/app.py
 import os
 import uvicorn
-from fastapi import FastAPI, HTTPException # HTTPException is still useful for error responses
+from fastapi import FastAPI, HTTPException
 from dotenv import load_dotenv
 
 # ADK imports
-from adk.agent_client import AgentClient
-from adk.message import MessageBuilder, Message # Import Message for type hinting
+from google.adk.agents.llm_agent import Agent # LlmAgent is aliased to Agent
+from google.adk.models.lite_llm import LiteLlm # For connecting to Ollama via LiteLLM
+from google.adk.tools.agent_tool import AgentTool # To use other agents as tools
+from google.generativeai import types # For creating message content
 
 # Import your agents from the new 'agents' directory
 from agents.smart_home_agent import SmartHomeAgent
 from agents.weather_agent import WeatherAgent
 
 # Import your tools from the new 'tools' directory
-from tools.ollama_tool import OllamaTool
+from tools.ollama_tool import OllamaTool # Still keep this for direct access if needed
 from tools.mcp_tool import MCPTool
-from tools.weather_api_tool import WeatherAPITool
+from tools.weather_api_tool import WeatherAPITool # This tool is used by WeatherAgent
 
 # Load environment variables from .env file (if it exists).
-# This is crucial for your API keys and service URLs.
 load_dotenv()
 
 app = FastAPI()
-agent_client = AgentClient()
 
-# --- Initialize Tools ---
-# These tools encapsulate the logic for interacting with external services.
-# They are passed to agents or can be used directly by the application.
+# --- Initialize Tools (used by sub-agents or directly) ---
 ollama_tool = OllamaTool(
     ollama_base_url=os.environ.get("OLLAMA_BASE_URL", "http://ollama:11434")
 )
@@ -34,19 +32,38 @@ mcp_tool = MCPTool(
     mcp_server_url=os.environ.get("MCP_SERVER_URL", "http://mcp_server:4000")
 )
 weather_api_tool = WeatherAPITool(
-    api_key=os.environ.get("OPENWEATHER_API_KEY") # Ensure this ENV VAR is set in docker-compose or .env
+    api_key=os.environ.get("OPENWEATHER_API_KEY")
 )
 
-# --- Register Agents ---
-# Each agent needs a unique ID. You pass the necessary tools or initial state to them.
-agent_client.register_agent(SmartHomeAgent(agent_id="smart_home_agent", initial_state={"temperature": 25.0, "light": "on"}))
-agent_client.register_agent(WeatherAgent(agent_id="weather_agent", weather_tool=weather_api_tool))
+# --- Define Sub-Agents (which will act as tools for the main orchestrator) ---
+smart_home_agent_instance = SmartHomeAgent(
+    agent_id="smart_home_agent",
+    initial_state={"temperature": 25.0, "light": "on"}
+)
+weather_agent_instance = WeatherAgent(
+    agent_id="weather_agent",
+    weather_tool=weather_api_tool
+)
 
+# --- Create the Main Orchestrator Agent ---
+main_orchestrator_agent = Agent(
+    name="main_adk_orchestrator",
+    model=LiteLlm(model="ollama/gemma2:2b"), # Use ollama/ prefix for LiteLlm
+    description="I am a multi-purpose assistant that can answer general questions, "
+                "provide smart home information, and fetch weather data.",
+    instruction="""You are a helpful and versatile assistant.
+    If the user asks about smart home status or to control smart home devices, use the 'smart_home_agent'.
+    If the user asks about current weather for an Indian city, use the 'weather_agent'.
+    Otherwise, respond to general questions.
+    """,
+    tools=[
+        AgentTool(smart_home_agent_instance),
+        AgentTool(weather_agent_instance),
+    ]
+)
 
 # --- Mount ADK Client's Endpoints ---
-# This makes the ADK client's internal endpoints accessible at /adk/v1.
-# This is how external systems (or other agents in a more complex setup) can communicate.
-app.include_router(agent_client.router, prefix="/adk/v1")
+app.include_router(main_orchestrator_agent.router, prefix="/adk/v1")
 
 
 # --- Basic Health Check Endpoint ---
@@ -55,38 +72,42 @@ async def read_root():
     return {"message": "ADK Multi-Agent Application is running and ready for interaction!"}
 
 
-# --- Example Endpoints for Direct Interaction (for easy testing via browser/curl) ---
-# These endpoints allow you to directly send messages to specific agents
-# without needing to understand the full ADK message format.
+# --- Example Endpoint for Direct Interaction ---
+@app.post("/ask_agent")
+async def ask_agent(query: str):
+    """
+    Example endpoint to send a query to the main orchestrator agent,
+    which will then route to sub-agents if needed.
+    """
+    user_id = "test_user" # A unique identifier for the user
+    session_id = "default_session" # A session ID for continuous conversation
 
-@app.get("/ask_smart_home")
-async def ask_smart_home(query: str = "What's the temperature?"):
-    """
-    Example endpoint to send a query to the Smart Home Agent.
-    """
-    # Build an ADK message to send to the smart_home_agent
-    message = MessageBuilder().text_message(query).add_sender_id("user_client").add_recipient_id("smart_home_agent").build()
-    
-    # Send the message and get the response from the agent
-    response_message: Message = await agent_client.send_message(message)
-    
-    return {"query_sent": query, "smart_home_agent_response": response_message.text()}
+    content = types.Content(
+        role="user",
+        parts=[types.Part(text=query)]
+    )
 
-@app.get("/get_weather")
-async def get_weather_data(city: str = "Mumbai"):
-    """
-    Example endpoint to send a query to the Weather Agent.
-    """
-    # Build an ADK message to send to the weather_agent
-    message = MessageBuilder().text_message(f"What's the weather in {city}?").add_sender_id("user_client").add_recipient_id("weather_agent").build()
-    
-    # Send the message and get the response from the agent
-    response_message: Message = await agent_client.send_message(message)
-    
-    return {"city_queried": city, "weather_agent_response": response_message.text()}
+    try:
+        events_async = main_orchestrator_agent.run_async(
+            user_id=user_id,
+            session_id=session_id,
+            new_message=content
+        )
 
-# You can also add endpoints to directly call your tools for testing purposes,
-# though typically agents would use these tools internally.
+        response_parts = []
+        async for event in events_async:
+            if event.output.message and event.output.message.text:
+                response_parts.append(event.output.message.text)
+
+        if response_parts:
+            return {"query": query, "response": "\n".join(response_parts)}
+        else:
+            return {"query": query, "response": "No final response received from agent."}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error interacting with agent: {e}")
+
+
 @app.post("/direct_call_ollama")
 async def direct_call_ollama(prompt: str):
     """Directly calls the OllamaTool, bypassing agent routing."""
