@@ -22,9 +22,6 @@ ollama_models/
 *.csv
 *.zip
 *.gz
-*.jpg
-*.jpeg
-*.png
 *.h5
 *.tflite
 
