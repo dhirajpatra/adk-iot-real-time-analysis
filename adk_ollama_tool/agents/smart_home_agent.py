@@ -21,9 +21,9 @@ class SmartHomeAgent(Agent):
     A simple agent that simulates smart home data and responds to queries about its state.
     """
     def __init__(self, agent_id: str, initial_state: dict):
-        super().__init__(agent_id)
+        super().__init__(name=agent_id)
         self._state = initial_state # Holds simulated sensor data
-        print(f"SmartHomeAgent {self.id} initialized with state: {self._state}")
+        print(f"SmartHomeAgent initialized with state: {self._state}")
 
     # The type hint `message: Message` will now refer to `Any` if Message is not imported.
     # The return type `-> Message` will also refer to `Any`.

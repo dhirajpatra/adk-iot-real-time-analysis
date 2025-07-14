@@ -1,4 +1,5 @@
 # adk_ollama_tool/requirements.txt
+google-generativeai
 google-adk
 litellm
 fastapi

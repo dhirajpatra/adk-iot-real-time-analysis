@@ -5,26 +5,34 @@ from fastapi import FastAPI, HTTPException
 from dotenv import load_dotenv
 
 # ADK imports
-from google.adk.agents.llm_agent import Agent # LlmAgent is aliased to Agent
-from google.adk.models.lite_llm import LiteLlm # For connecting to Ollama via LiteLLM
-from google.adk.tools.agent_tool import AgentTool # To use other agents as tools
-from google.generativeai import types # For creating message content
+from google.adk.agents.llm_agent import Agent
+from google.adk.models.lite_llm import LiteLlm
+from google.adk.tools.agent_tool import AgentTool
+from google.generativeai import types
 
-# Import your agents from the new 'agents' directory
+# RUNNER AND SESSION SERVICE
+from google.adk.runners import Runner
+from google.adk.sessions import InMemorySessionService
+
+# Import your agents
 from agents.smart_home_agent import SmartHomeAgent
 from agents.weather_agent import WeatherAgent
 
-# Import your tools from the new 'tools' directory
-from tools.ollama_tool import OllamaTool # Still keep this for direct access if needed
+# Import your tools
+from tools.ollama_tool import OllamaTool
 from tools.mcp_tool import MCPTool
-from tools.weather_api_tool import WeatherAPITool # This tool is used by WeatherAgent
+from tools.weather_api_tool import WeatherAPITool
+from tools.time_tool import get_current_time
 
-# Load environment variables from .env file (if it exists).
+# Load environment variables
 load_dotenv()
 
-app = FastAPI()
+# --- Session Management Constants ---
+APP_NAME = "adk_multi_agent_app"
+USER_ID = "test_user"
+SESSION_ID = "default_session"
 
-# --- Initialize Tools (used by sub-agents or directly) ---
+# --- Initialize Tools ---
 ollama_tool = OllamaTool(
     ollama_base_url=os.environ.get("OLLAMA_BASE_URL", "http://ollama:11434")
 )
@@ -35,7 +43,7 @@ weather_api_tool = WeatherAPITool(
     api_key=os.environ.get("OPENWEATHER_API_KEY")
 )
 
-# --- Define Sub-Agents (which will act as tools for the main orchestrator) ---
+# --- Define Sub-Agents ---
 smart_home_agent_instance = SmartHomeAgent(
     agent_id="smart_home_agent",
     initial_state={"temperature": 25.0, "light": "on"}
@@ -48,39 +56,62 @@ weather_agent_instance = WeatherAgent(
 # --- Create the Main Orchestrator Agent ---
 main_orchestrator_agent = Agent(
     name="main_adk_orchestrator",
-    model=LiteLlm(model="ollama/gemma2:2b"), # Use ollama/ prefix for LiteLlm
+    model=LiteLlm(model="ollama/gemma2:2b"),
     description="I am a multi-purpose assistant that can answer general questions, "
-                "provide smart home information, and fetch weather data.",
+                "provide smart home information, fetch weather data, and tell the current time.",
     instruction="""You are a helpful and versatile assistant.
     If the user asks about smart home status or to control smart home devices, use the 'smart_home_agent'.
     If the user asks about current weather for an Indian city, use the 'weather_agent'.
+    If the user asks about the current time in a specific city, use the 'get_current_time' tool.
     Otherwise, respond to general questions.
     """,
     tools=[
         AgentTool(smart_home_agent_instance),
         AgentTool(weather_agent_instance),
+        get_current_time,
     ]
 )
 
-# --- Mount ADK Client's Endpoints ---
-app.include_router(main_orchestrator_agent.router, prefix="/adk/v1")
+# --- Initialize ADK Runner ---
+session_service = InMemorySessionService()
+adk_runner = Runner(
+    agent=main_orchestrator_agent,
+    app_name=APP_NAME,
+    session_service=session_service
+)
+
+# --- Initialize the Main FastAPI Application ---
+# This is your primary FastAPI app instance.
+app = FastAPI()
+
+# --- Include ADK Runner's Routes ---
+# This line is crucial for exposing ADK's internal endpoints (like /adk/v1/...).
+# If this line causes an error (AttributeError: 'Runner' object has no attribute 'router'),
+# then your ADK version's Runner API is different.
+try:
+    app.include_router(adk_runner.router, prefix="/adk/v1")
+except AttributeError:
+    print("Warning: adk_runner.router attribute not found. ADK Runner API might have changed.")
+    print("Please provide the output of 'pip show google-adk' from your Docker container.")
+    # If .router doesn't exist, the ADK Runner might be directly runnable by uvicorn
+    # and custom routes need to be added to it via a different mechanism,
+    # or you're expected to only use the routes it exposes by default.
+    # For now, we'll proceed assuming the issue is with Runner's router exposure.
 
 
-# --- Basic Health Check Endpoint ---
+# --- Define Custom API Endpoints on the main 'app' instance ---
 @app.get("/")
 async def read_root():
     return {"message": "ADK Multi-Agent Application is running and ready for interaction!"}
 
-
-# --- Example Endpoint for Direct Interaction ---
 @app.post("/ask_agent")
 async def ask_agent(query: str):
     """
-    Example endpoint to send a query to the main orchestrator agent,
-    which will then route to sub-agents if needed.
+    Example endpoint to send a query to the main orchestrator agent.
+    Uses the static USER_ID and SESSION_ID defined at the top.
     """
-    user_id = "test_user" # A unique identifier for the user
-    session_id = "default_session" # A session ID for continuous conversation
+    user_id = USER_ID
+    session_id = SESSION_ID
 
     content = types.Content(
         role="user",
@@ -88,7 +119,7 @@ async def ask_agent(query: str):
     )
 
     try:
-        events_async = main_orchestrator_agent.run_async(
+        events_async = adk_runner.run_async(
             user_id=user_id,
             session_id=session_id,
             new_message=content
@@ -106,7 +137,6 @@ async def ask_agent(query: str):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error interacting with agent: {e}")
-
 
 @app.post("/direct_call_ollama")
 async def direct_call_ollama(prompt: str):

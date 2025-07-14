@@ -16,9 +16,9 @@ class WeatherAgent(Agent):
     An agent that provides current weather data for Indian cities using a WeatherAPITool.
     """
     def __init__(self, agent_id: str, weather_tool: WeatherAPITool):
-        super().__init__(agent_id)
+        super().__init__(name=agent_id)
         self._weather_tool = weather_tool
-        print(f"WeatherAgent {self.id} initialized.")
+        print(f"WeatherAgent initialized with {self._weather_tool}.")
 
     # The type hint `message: Message` will now refer to `Any` if Message is not imported.
     # The return type `-> Message` will also refer to `Any`.
