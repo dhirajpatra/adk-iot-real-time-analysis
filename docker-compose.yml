@@ -37,8 +37,11 @@ services:
       - "1883:1883" # Standard MQTT port
       - "9001:9001" # WebSocket port (optional, for web clients)
     volumes:
+      - ./mosquitto_config:/mosquitto/config
       - mosquitto_data:/mosquitto/data
       - mosquitto_logs:/mosquitto/log
+    command: mosquitto -c /mosquitto/config/mosquitto.conf
+    user: "0" # <--- ADD THIS LINE FOR TESTING PERMISSIONS
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "mosquitto_sub -t '$$SYS/broker/version' -C 1 || exit 1"]
