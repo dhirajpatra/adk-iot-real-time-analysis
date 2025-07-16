@@ -1,8 +1,9 @@
-# adk_ollama_tool/requirements.txt
-google-generativeai
-google-adk
+google-genai 
+google-adk>=1.6.1
 litellm
 fastapi
 uvicorn[standard]
 httpx
-python-dotenv # For loading environment variables (like API keys) from a .env file
+python-dotenv
+tzdata
+paho-mqtt

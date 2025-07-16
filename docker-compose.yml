@@ -1,25 +1,24 @@
+# docker-compose.yml
 services:
   ollama:
     # Use your custom Dockerfile to build the Ollama service
-    build: 
+    build:
       context: ./ollama_server
     container_name: ollama
     ports:
       - "11434:11434"
     volumes:
-      # - .:/app
-      - ./ollama_data:/root/.ollama  # ✅ Changed from direct /root path to local folder
-      - ./ollama_models:/root/.ollama/models
+      - ollama_data:/root/.ollama
+      - ollama_models:/root/.ollama/models
     environment:
       - OLLAMA_HOST=0.0.0.0
     restart: unless-stopped
     healthcheck:
-      # Keep the health check, but give it more time to start up and pull the model
       test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
       interval: 60s
       timeout: 15s
       retries: 5
-      start_period: 120s
+      start_period: 120s # Good for initial model download, can be reduced later
     deploy: # for laptop nvidia GPU support if not available comment out
       resources:
         reservations:
@@ -28,6 +27,22 @@ services:
               count: 1
               capabilities: [gpu]
 
+  mosquitto:
+    image: eclipse-mosquitto:latest
+    container_name: mosquitto
+    ports:
+      - "1883:1883" # Standard MQTT port
+      - "9001:9001" # WebSocket port (optional, for web clients)
+    volumes:
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_logs:/mosquitto/log
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "mosquitto_sub -t '$$SYS/broker/version' -C 1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   mcp_server:
     build:
       context: ./mcp_server
@@ -35,8 +50,9 @@ services:
     container_name: mcp_server
     ports:
       - "4000:4000"
+    # IMPORTANT: Only uncomment this if your MCP server actually makes calls to Ollama.
+    # Otherwise, it unnecessarily delays MCP server startup.
     depends_on:
-      # MCP server needs Ollama to be initialized to use the models
       ollama:
         condition: service_healthy
     restart: unless-stopped
@@ -51,19 +67,23 @@ services:
     env_file:
       - .env
     environment:
-      - OLLAMA_BASE_URL=http://ollama:11434
-      - MCP_SERVER_URL=http://mcp_server:4000
+      OLLAMA_BASE_URL: http://ollama:11434
+      MCP_SERVER_URL: http://mcp_server:4000
+      OPENWEATHER_API_KEY: ${OPENWEATHER_API_KEY} # Ensure this is set in your .env file
+      MQTT_BROKER_HOST: mosquitto # MQTT broker hostname within the Docker network
+      MQTT_BROKER_PORT: 1883
+      PYTHONUNBUFFERED: 1
     depends_on:
-      # ADK app needs Ollama to be initialized and MCP server to be running
       ollama:
         condition: service_healthy
+      mosquitto:
+        condition: service_healthy
       mcp_server:
-        condition: service_started # ADK app just needs MCP to be running
+        condition: service_started
     restart: unless-stopped
 
 volumes:
   ollama_data:
-    driver: local
   ollama_models:
-    driver: local
-  
+  mosquitto_data:
+  mosquitto_logs:

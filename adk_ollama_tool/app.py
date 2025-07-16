@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from google.adk.agents.llm_agent import Agent
 from google.adk.models.lite_llm import LiteLlm
 from google.adk.tools.agent_tool import AgentTool
-from google.generativeai import types
+from google.genai import types
 
 # RUNNER AND SESSION SERVICE
 from google.adk.runners import Runner
