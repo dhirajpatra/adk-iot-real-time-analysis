@@ -6,6 +6,7 @@ import paho.mqtt.client as mqtt
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from dotenv import load_dotenv
+from fastapi.middleware.cors import CORSMiddleware
 
 # Import your agents and tools
 from agents.smart_home_agent import SmartHomeAgent
@@ -16,6 +17,15 @@ from tools.ollama_tool import OllamaTool
 load_dotenv()
 
 app = FastAPI(title="ADK Ollama Application")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # or specify: ["http://localhost:3000"] etc.
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 # --- Configuration for MQTT, MCP, Ollama, OpenWeatherMap ---
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL")

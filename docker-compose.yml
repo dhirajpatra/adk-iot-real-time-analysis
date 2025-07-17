@@ -108,7 +108,10 @@ services:
       dockerfile: Dockerfile.dashboard
     container_name: dashboard_server
     ports:
-      - "6000:6000" # Expose 6000 for the dashboard
+      - "8080:8000"
+    volumes:
+      - ./dashboard_server/templates:/app/templates
+      - ./dashboard_server/static:/app/static
     env_file:
       - .env
     environment:

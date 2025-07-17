@@ -7,11 +7,20 @@ import json
 import time
 import os
 import uvicorn
+from fastapi.middleware.cors import CORSMiddleware
 
 # Adjusted import path: It's now inside the 'tools' package within mcp_server
 from tools.weather_api_tool import WeatherAPITool
 
-app = FastAPI()
+app = FastAPI(title="MCP Server")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # or specify: ["http://localhost:3000"] etc.
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY")
 if not OPENWEATHER_API_KEY:

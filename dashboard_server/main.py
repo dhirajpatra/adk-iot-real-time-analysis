@@ -7,11 +7,20 @@ from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 import httpx # For making HTTP requests to other services
 import asyncio # For async HTTP requests
+from fastapi.middleware.cors import CORSMiddleware
 
 # Load environment variables from .env file
 load_dotenv()
 
 app = FastAPI(title="ADK IoT Dashboard")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # or specify: ["http://localhost:3000"] etc.
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Configure Jinja2 templates directory
 templates = Jinja2Templates(directory="templates")
@@ -39,14 +48,19 @@ async def read_dashboard(request: Request):
         "llm_clothing_suggestion": "Fetching latest insights...",
         "error_message": None
     }
-
+    print(f"Fetching data from ADK app at {ADK_APP_URL}")  # Debugging output
     try:
         async with httpx.AsyncClient() as client:
             # Call the ADK app's endpoint to get the combined data and recommendations
-            response = await client.get(f"{ADK_APP_URL}/get_dashboard_data", timeout=30.0) # Increased timeout
+            response = await client.get(f"{ADK_APP_URL}/get_dashboard_data/", timeout=30.0) # Increased timeout
             response.raise_for_status() # Raise an exception for bad status codes
             data = response.json()
+            print(f"Fetched dashboard data: {data}")  # Debugging output
 
+            # Check if the response contains the expected keys
+            if not isinstance(data, dict):
+                raise ValueError("Unexpected data format received from ADK app.")
+            
             # Populate dashboard_data with fetched information
             dashboard_data["indoor_temp"] = data.get("indoor_temp", "N/A")
             dashboard_data["indoor_humidity"] = data.get("indoor_humidity", "N/A")
