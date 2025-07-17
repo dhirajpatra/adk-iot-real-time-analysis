@@ -1,23 +1,21 @@
-from fastapi import FastAPI, Request
-from fastapi.responses import StreamingResponse
+# mcp_server/server.py
+
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
 import asyncio
 import json
 import time
-import random
 import os
-import uvicorn # <--- Add this import
+import uvicorn
 
-# Import WeatherAPITool from its new location
+# Adjusted import path: It's now inside the 'tools' package within mcp_server
 from tools.weather_api_tool import WeatherAPITool
 
 app = FastAPI()
 
-# Initialize WeatherAPITool - Ensure API key is passed from environment
 OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY")
 if not OPENWEATHER_API_KEY:
-    # This will cause the container to fail fast if API key is missing
-    print("FATAL ERROR: OPENWEATHER_API_KEY environment variable is not set for MCP Server.")
-    exit(1) # Or raise an exception appropriate for your startup flow
+    raise ValueError("FATAL ERROR: OPENWEATHER_API_KEY environment variable is not set for MCP Server.")
 
 weather_tool = WeatherAPITool(api_key=OPENWEATHER_API_KEY)
 
@@ -26,44 +24,86 @@ async def read_root():
     """Basic health check endpoint for the MCP server."""
     return {"message": "MCP Server (FastAPI) is running!"}
 
-@app.get("/sse")
-async def sse_endpoint(request: Request):
+@app.get("/weather_current")
+async def get_current_weather_endpoint(city: str):
     """
-    Server-Sent Events endpoint for real-time updates.
-    This simulates sending math results or other data.
+    Fetches current weather data for a given city using OpenWeatherMap 2.5 API (via Geocoding).
     """
-    async def event_generator():
-        client_disconnected = False
-        while not client_disconnected:
-            try:
-                await asyncio.sleep(0.1)
-                # For FastAPI, checking request.is_disconnected() is more reliable
-                if await request.is_disconnected(): # Better disconnection check
-                    client_disconnected = True
-                    print("Client disconnected from SSE.")
-                    break
-            except asyncio.CancelledError:
-                client_disconnected = True
-                print("Client disconnected from SSE (CancelledError).")
-                break
+    print(f"MCP Server: Received request for current weather for city='{city}'")
+    current_weather_data_raw = await weather_tool.get_current_weather_2_5(city)
 
-            math_result = {
-                "timestamp": time.time(),
-                "value": random.uniform(100, 1000),
-                "operation": "random_math_op"
-            }
-            yield f"data: {json.dumps(math_result)}\n\n"
+    if not current_weather_data_raw:
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve current weather for {city}. Check MCP server logs for details from 2.5 API call.")
 
-            await asyncio.sleep(1) # Send an event every 1 second
+    # Parse the 2.5 API response structure as per your Postman output
+    coord = current_weather_data_raw.get("coord", {})
+    weather_list = current_weather_data_raw.get("weather", [{}])
+    main_data = current_weather_data_raw.get("main", {})
+    wind_data = current_weather_data_raw.get("wind", {})
+    sys_data = current_weather_data_raw.get("sys", {})
 
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+    temp = main_data.get("temp")
+    humidity = main_data.get("humidity")
+    pressure = main_data.get("pressure")
+    wind_speed = wind_data.get("speed")
+    
+    weather_info = weather_list[0].get("description", "N/A") if weather_list else "N/A"
+    
+    response_payload = {
+        "city": city,
+        "lat": coord.get("lat"),
+        "lon": coord.get("lon"),
+        "dt": current_weather_data_raw.get("dt"), # Unix timestamp of the data
+        "temperature": temp,
+        "humidity": humidity,
+        "description": weather_info,
+        "pressure": pressure,
+        "wind_speed": wind_speed,
+        "country": sys_data.get("country")
+    }
+    print(f"MCP Server: Successfully prepared current weather data for {city}.")
+    return JSONResponse(content=response_payload, status_code=200)
 
-@app.post("/calculate")
-async def calculate_something(data: dict):
-    print(f"Received calculation request: {data}")
-    result = data.get("num1", 0) + data.get("num2", 0)
-    return {"result": result, "status": "completed"}
+@app.get("/weather_historical")
+async def get_historical_weather_endpoint(city: str, dt: int):
+    """
+    Fetches historical weather data for a given city at a specific Unix timestamp
+    using the OpenWeatherMap 3.0 One Call API (Timemachine).
+    """
+    print(f"MCP Server: Received request for historical weather for city='{city}' at dt='{dt}'")
+    historical_weather_data_raw = await weather_tool.get_historical_weather_one_call_3_0(city, dt)
 
-# --- ADD THIS BLOCK TO RUN THE FASTAPI APPLICATION ---
+    if not historical_weather_data_raw or "data" not in historical_weather_data_raw or len(historical_weather_data_raw["data"]) == 0:
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve historical weather for {city} at {dt}. No data found or API error. Check MCP server logs for details.")
+    
+    hourly_data = historical_weather_data_raw["data"][0] 
+    
+    temp = hourly_data.get("temp")
+    humidity = hourly_data.get("humidity")
+    pressure = hourly_data.get("pressure")
+    wind_speed = hourly_data.get("wind_speed")
+    
+    weather_info = "N/A"
+    if "weather" in hourly_data and len(hourly_data["weather"]) > 0:
+        weather_info = hourly_data["weather"][0].get("description", "N/A")
+    
+    response_payload = {
+        "city": city,
+        "requested_dt": dt,
+        "actual_data_dt": hourly_data.get("dt"), # The actual timestamp of the data point
+        "temperature": temp,
+        "humidity": humidity,
+        "description": weather_info,
+        "pressure": pressure,
+        "wind_speed": wind_speed,
+    }
+    print(f"MCP Server: Successfully prepared historical weather data for {city}.")
+    return JSONResponse(content=response_payload, status_code=200)
+
+@app.get("/health")
+async def health_check():
+    """Endpoint for Docker healthchecks."""
+    return {"status": "ok"}
+
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=4000)

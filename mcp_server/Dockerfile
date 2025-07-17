@@ -13,5 +13,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
+# Expose the port FastAPI runs on
+EXPOSE 4000
+
 # Your CMD or ENTRYPOINT
 CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "4000"]
