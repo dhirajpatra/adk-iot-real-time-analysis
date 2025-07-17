@@ -1,7 +1,7 @@
 # mcp_server/tools/weather_api_tool.py
 import httpx
 import os
-import time # Needed for unix timestamp
+import time
 
 class WeatherAPITool:
     """
@@ -14,11 +14,16 @@ class WeatherAPITool:
             raise ValueError("OpenWeatherMap API Key is required for WeatherAPITool. Please set OPENWEATHER_API_KEY environment variable.")
         self._api_key = api_key
         self._geocoding_base_url = "http://api.openweathermap.org/geo/1.0/direct"
-        self._current_weather_base_url = "http://api.openweathermap.org/data/2.5/weather" # <<< USING 2.5 FOR CURRENT
-        self._timemachine_base_url = "https://api.openweathermap.org/data/3.0/onecall/timemachine" # Still for historical
+        self._current_weather_base_url = "http://api.openweathermap.org/data/2.5/weather"
+        self._timemachine_base_url = "https://api.openweathermap.org/data/3.0/onecall/timemachine"
 
         self._client = httpx.AsyncClient()
         print(f"WeatherAPITool initialized. (API Key: {self._api_key[:5]}*****)")
+
+        # Caching for current weather
+        self._last_weather_data = {} # Stores data by city: {city: {data}}
+        self._last_weather_fetch_time = {} # Stores fetch time by city: {city: timestamp}
+        self._min_fetch_interval_seconds = 60 # Fetch only once every 60 seconds per city
 
     async def _get_coords_from_city(self, city_name: str) -> tuple or None:
         """
@@ -27,7 +32,7 @@ class WeatherAPITool:
         """
         params = {
             "q": city_name,
-            "limit": 1, # Get only the top result
+            "limit": 1,
             "appid": self._api_key,
         }
         try:
@@ -57,9 +62,16 @@ class WeatherAPITool:
 
     async def get_current_weather_2_5(self, city_name: str) -> dict or None:
         """
-        Fetches current weather data for a given city using OpenWeatherMap Current Weather Data 2.5.
-        First gets coordinates, then queries the 2.5 API.
+        Fetches current weather data for a given city using OpenWeatherMap Current Weather Data 2.5,
+        with a 60-second cache.
         """
+        current_time = time.time()
+        # Check cache first
+        if city_name in self._last_weather_data and \
+           (current_time - self._last_weather_fetch_time.get(city_name, 0)) < self._min_fetch_interval_seconds:
+            print(f"WeatherAPITool: Returning cached current weather for {city_name}.")
+            return self._last_weather_data[city_name]
+
         coords = await self._get_coords_from_city(city_name)
         if not coords:
             print(f"WeatherAPITool: Could not get coordinates for {city_name} for current weather.")
@@ -78,9 +90,11 @@ class WeatherAPITool:
             response.raise_for_status()
             data = response.json()
 
-            if data and data.get("cod") == 200: # 2.5 API returns 'cod: 200' on success
-                print(f"WeatherAPITool: Successfully retrieved current weather for {city_name}.")
-                return data # Return the entire 2.5 API response
+            if data and data.get("cod") == 200:
+                print(f"WeatherAPITool: Successfully retrieved new current weather for {city_name}. Caching...")
+                self._last_weather_data[city_name] = data
+                self._last_weather_fetch_time[city_name] = current_time
+                return data
             else:
                 message = data.get('message', 'Unknown error or no data from 2.5 API')
                 print(f"WeatherAPITool: API error for current weather ({city_name}): {message}. Full response: {data}")
@@ -99,7 +113,7 @@ class WeatherAPITool:
         """
         Fetches historical weather data for a given city and Unix timestamp
         using the OpenWeatherMap One Call API 3.0 (Timemachine).
-        First gets coordinates, then queries the Timemachine API.
+        No caching for historical as it's typically a unique request.
         """
         coords = await self._get_coords_from_city(city_name)
         if not coords:
@@ -122,7 +136,7 @@ class WeatherAPITool:
 
             if data and "data" in data and len(data["data"]) > 0:
                 print(f"WeatherAPITool: Successfully retrieved historical weather for {city_name}.")
-                return data # Return the entire response containing the 'data' array
+                return data
             else:
                 message = data.get('message', 'Unknown error or no historical data from One Call API 3.0 Timemachine')
                 print(f"WeatherAPITool: API error for historical weather ({city_name}, {dt}): {message}. Full response: {data}")

@@ -25,10 +25,18 @@ OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY")
 # --- Initialize Agents and Tools ---
 smart_home_agent = SmartHomeAgent(agent_id="HomeSensorAgent", initial_state={"temperature": "N/A", "humidity": "N/A", "light": "off"})
 
-ollama_tool = OllamaTool(base_url=OLLAMA_BASE_URL, model="gemma3:1b")
+ollama_tool = None
+weather_agent = None
 
-# FIX: Add 'agent_id' back to the WeatherAgent initialization
-weather_agent = WeatherAgent(agent_id="WeatherGuru", mcp_server_url=MCP_SERVER_URL, api_key=OPENWEATHER_API_KEY)
+try:
+    ollama_tool = OllamaTool(base_url=OLLAMA_BASE_URL, model="gemma3:1b")
+except Exception as e:
+    print(f"OllamaTool init failed: {e}")
+
+try:
+    weather_agent = WeatherAgent(agent_id="WeatherGuru", mcp_server_url=MCP_SERVER_URL, api_key=OPENWEATHER_API_KEY)
+except Exception as e:
+    print(f"WeatherAgent init failed: {e}")
 
 
 # --- FastAPI Application Lifecycle Events ---
@@ -46,7 +54,7 @@ async def shutdown_event():
 
 class ChatRequest(BaseModel):
     message: str
-    city: str = "London"
+    city: str = "Bengaluru"
 
 @app.post("/chat/")
 async def chat_with_adk(request: ChatRequest):

@@ -9,6 +9,7 @@ A comprehensive multi-agent microservice application leveraging ADK (Agent Devel
 ![ADK Agent Services](images/4.png)
 ![ADK Agent Services](images/5.png)
 ![ADK Agent Services](images/6.png)
+![ADK Agent Services](images/7.png)
 
 This multi-agent application, combining a local Smart Home agent (Arduino-based sensors) with a cloud-connected Weather API agent (OpenWeatherMap), built on ADK and Ollama, has a strong foundation. Here are several real-world problems it can solve, ranging from immediate applications to more advanced scenarios with minor changes:
 
