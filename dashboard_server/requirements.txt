@@ -1,0 +1,6 @@
+# dashboard_server/requirements.txt
+fastapi
+uvicorn
+jinja2
+python-dotenv
+httpx

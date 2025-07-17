@@ -1,155 +1,127 @@
-# adk_ollama_tool/app.py
+# adk_ollama_tool/app.py 
 import os
-import uvicorn
+import json
+import asyncio
+import paho.mqtt.client as mqtt
 from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
 from dotenv import load_dotenv
 
-# ADK imports
-from google.adk.agents.llm_agent import Agent
-from google.adk.models.lite_llm import LiteLlm
-from google.adk.tools.agent_tool import AgentTool
-from google.genai import types
-
-# RUNNER AND SESSION SERVICE
-from google.adk.runners import Runner
-from google.adk.sessions import InMemorySessionService
-
-# Import your agents
+# Import your agents and tools
 from agents.smart_home_agent import SmartHomeAgent
-from agents.weather_agent import WeatherAgent
-
-# Import your tools
+from agents.weather_agent import WeatherAgent # Make sure this WeatherAgent is updated from previous step!
 from tools.ollama_tool import OllamaTool
-from tools.mcp_tool import MCPTool
-from tools.weather_api_tool import WeatherAPITool
-from tools.time_tool import get_current_time
 
 # Load environment variables
 load_dotenv()
 
-# --- Session Management Constants ---
-APP_NAME = "adk_multi_agent_app"
-USER_ID = "test_user"
-SESSION_ID = "default_session"
+app = FastAPI(title="ADK Ollama Application")
 
-# --- Initialize Tools ---
-ollama_tool = OllamaTool(
-    ollama_base_url=os.environ.get("OLLAMA_BASE_URL", "http://ollama:11434")
-)
-mcp_tool = MCPTool(
-    mcp_server_url=os.environ.get("MCP_SERVER_URL", "http://mcp_server:4000")
-)
-weather_api_tool = WeatherAPITool(
-    api_key=os.environ.get("OPENWEATHER_API_KEY")
-)
+# --- Configuration for MQTT, MCP, Ollama, OpenWeatherMap ---
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL")
+MCP_SERVER_URL = os.getenv("MCP_SERVER_URL")
+OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY")
 
-# --- Define Sub-Agents ---
-smart_home_agent_instance = SmartHomeAgent(
-    agent_id="smart_home_agent",
-    initial_state={"temperature": 25.0, "light": "on"}
-)
-weather_agent_instance = WeatherAgent(
-    agent_id="weather_agent",
-    weather_tool=weather_api_tool
-)
+# --- Initialize Agents and Tools ---
+smart_home_agent = SmartHomeAgent(agent_id="HomeSensorAgent", initial_state={"temperature": "N/A", "humidity": "N/A", "light": "off"})
 
-# --- Create the Main Orchestrator Agent ---
-main_orchestrator_agent = Agent(
-    name="main_adk_orchestrator",
-    model=LiteLlm(model="ollama/gemma2:2b"),
-    description="I am a multi-purpose assistant that can answer general questions, "
-                "provide smart home information, fetch weather data, and tell the current time.",
-    instruction="""You are a helpful and versatile assistant.
-    If the user asks about smart home status or to control smart home devices, use the 'smart_home_agent'.
-    If the user asks about current weather for an Indian city, use the 'weather_agent'.
-    If the user asks about the current time in a specific city, use the 'get_current_time' tool.
-    Otherwise, respond to general questions.
-    """,
-    tools=[
-        AgentTool(smart_home_agent_instance),
-        AgentTool(weather_agent_instance),
-        get_current_time,
-    ]
-)
+ollama_tool = OllamaTool(base_url=OLLAMA_BASE_URL, model="gemma3:1b")
 
-# --- Initialize ADK Runner ---
-session_service = InMemorySessionService()
-adk_runner = Runner(
-    agent=main_orchestrator_agent,
-    app_name=APP_NAME,
-    session_service=session_service
-)
-
-# --- Initialize the Main FastAPI Application ---
-# This is your primary FastAPI app instance.
-app = FastAPI()
-
-# --- Include ADK Runner's Routes ---
-# This line is crucial for exposing ADK's internal endpoints (like /adk/v1/...).
-# If this line causes an error (AttributeError: 'Runner' object has no attribute 'router'),
-# then your ADK version's Runner API is different.
-try:
-    app.include_router(adk_runner.router, prefix="/adk/v1")
-except AttributeError:
-    print("Warning: adk_runner.router attribute not found. ADK Runner API might have changed.")
-    print("Please provide the output of 'pip show google-adk' from your Docker container.")
-    # If .router doesn't exist, the ADK Runner might be directly runnable by uvicorn
-    # and custom routes need to be added to it via a different mechanism,
-    # or you're expected to only use the routes it exposes by default.
-    # For now, we'll proceed assuming the issue is with Runner's router exposure.
+# FIX: Add 'agent_id' back to the WeatherAgent initialization
+weather_agent = WeatherAgent(agent_id="WeatherGuru", mcp_server_url=MCP_SERVER_URL, api_key=OPENWEATHER_API_KEY)
 
 
-# --- Define Custom API Endpoints on the main 'app' instance ---
-@app.get("/")
-async def read_root():
-    return {"message": "ADK Multi-Agent Application is running and ready for interaction!"}
+# --- FastAPI Application Lifecycle Events ---
+@app.on_event("startup")
+async def startup_event():
+    print("Starting up ADK App...")
+    print("ADK App startup complete.")
 
-@app.post("/ask_agent")
-async def ask_agent(query: str):
-    """
-    Example endpoint to send a query to the main orchestrator agent.
-    Uses the static USER_ID and SESSION_ID defined at the top.
-    """
-    user_id = USER_ID
-    session_id = SESSION_ID
+@app.on_event("shutdown")
+async def shutdown_event():
+    print("Shutting down ADK App...")
+    print("ADK App shutdown complete.")
 
-    content = types.Content(
-        role="user",
-        parts=[types.Part(text=query)]
-    )
+# --- API Endpoints ---
 
+class ChatRequest(BaseModel):
+    message: str
+    city: str = "London"
+
+@app.post("/chat/")
+async def chat_with_adk(request: ChatRequest):
     try:
-        events_async = adk_runner.run_async(
-            user_id=user_id,
-            session_id=session_id,
-            new_message=content
-        )
+        response_content = await smart_home_agent.handle_message(request.message)
+        if response_content and response_content.parts and response_content.parts[0].text:
+            return {"response": response_content.parts[0].text}
 
-        response_parts = []
-        async for event in events_async:
-            if event.output.message and event.output.message.text:
-                response_parts.append(event.output.message.text)
+        response_content = await weather_agent.handle_message(request.message, request.city)
+        if response_content and response_content.parts and response_content.parts[0].text:
+            return {"response": response_content.parts[0].text}
 
-        if response_parts:
-            return {"query": query, "response": "\n".join(response_parts)}
-        else:
-            return {"query": query, "response": "No final response received from agent."}
-
+        llm_response = await ollama_tool.query(request.message)
+        return {"response": llm_response}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error interacting with agent: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/direct_call_ollama")
-async def direct_call_ollama(prompt: str):
-    """Directly calls the OllamaTool, bypassing agent routing."""
-    response = await ollama_tool.chat_with_ollama(prompt)
-    return {"prompt": prompt, "ollama_tool_response": response}
+@app.get("/get_indoor_status/")
+async def get_indoor_status():
+    return smart_home_agent._state
 
-@app.post("/direct_call_mcp")
-async def direct_call_mcp(num1: int, num2: int):
-    """Directly calls the MCPTool, bypassing agent routing."""
-    response = await mcp_tool.calculate(num1, num2)
-    return {"numbers": [num1, num2], "mcp_tool_response": response}
+@app.get("/get_outdoor_status/")
+async def get_outdoor_status(city: str = "London"):
+    try:
+        current_weather = await weather_agent.get_current_weather(city)
+        return current_weather
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get outdoor weather: {e}")
 
+@app.get("/get_dashboard_data/")
+async def get_dashboard_data(city: str = "London"):
+    try:
+        indoor_data = smart_home_agent._state
+        outdoor_data = await weather_agent.get_current_weather(city)
 
-if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+        indoor_temp = indoor_data.get("temperature", "N/A")
+        indoor_humidity = indoor_data.get("humidity", "N/A")
+        outdoor_temp = outdoor_data.get("temperature", "N/A")
+        outdoor_humidity = outdoor_data.get("humidity", "N/A")
+        outdoor_conditions = outdoor_data.get("description", "N/A")
+
+        briefing_prompt = (
+            f"The current indoor temperature is {indoor_temp}°C and humidity is {indoor_humidity}%. "
+            f"Outside, it's {outdoor_temp}°C with {outdoor_conditions} and {outdoor_humidity}% humidity. "
+            "Provide a concise, friendly weather briefing and a recommendation for indoor comfort, "
+            "considering opening windows or using a fan/AC. Keep it under 50 words."
+        )
+        llm_briefing = await ollama_tool.query(briefing_prompt)
+
+        activity_prompt = (
+            f"Given the current outdoor weather is {outdoor_temp}°C and {outdoor_conditions}, "
+            "suggest 2-3 suitable activities, including both indoor and outdoor options. Keep it concise."
+        )
+        llm_activity_suggestion = await ollama_tool.query(activity_prompt)
+
+        clothing_prompt = (
+            f"The current outdoor temperature is {outdoor_temp}°C with {outdoor_conditions}. "
+            "What kind of clothing would you recommend for going outside today? Keep it brief."
+        )
+        llm_clothing_suggestion = await ollama_tool.query(clothing_prompt)
+
+        return {
+            "indoor_temp": indoor_temp,
+            "indoor_humidity": indoor_humidity,
+            "outdoor_temp": outdoor_temp,
+            "outdoor_humidity": outdoor_humidity,
+            "outdoor_conditions": outdoor_conditions,
+            "llm_briefing": llm_briefing,
+            "llm_activity_suggestion": llm_activity_suggestion,
+            "llm_clothing_suggestion": llm_clothing_suggestion,
+        }
+    except Exception as e:
+        print(f"Error in get_dashboard_data: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate dashboard data: {e}")
+
+@app.get("/health/")
+async def health_check():
+    return {"status": "ok"}

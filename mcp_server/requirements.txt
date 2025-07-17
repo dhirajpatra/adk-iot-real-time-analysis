@@ -1,3 +1,4 @@
 fastapi
 uvicorn[standard]  # Uvicorn with standard extras for better performance (e.g., uvloop, httptools)
 asyncio
+httpx

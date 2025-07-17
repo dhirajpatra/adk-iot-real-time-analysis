@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Home ADK Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;700&display=swap" rel="stylesheet">
+    <link rel="icon" type="image/x-icon" href="{{ url_for('static', path='/favicon.ico') }}">
+    <script>
+        // Auto-refresh the page every 15 seconds
+        setTimeout(function(){
+            location.reload();
+        }, 15000); // 15000 milliseconds = 15 seconds
+    </script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Smart Home ADK Dashboard</h1>
+            <p>Real-time environmental insights and recommendations</p>
+        </header>
+
+        <section class="error-section" id="error-message" {% if not data.error_message %}style="display: none;"{% endif %}>
+            {% if data.error_message %}
+                <p><strong>Error:</strong> {{ data.error_message }}</p>
+            {% endif %}
+        </section>
+
+        <section class="data-cards">
+            <div class="card">
+                <h2>Indoor Conditions</h2>
+                <p>Temperature: <span class="data-value">{{ data.indoor_temp }}°C</span></p>
+                <p>Humidity: <span class="data-value">{{ data.indoor_humidity }}%</span></p>
+            </div>
+            <div class="card">
+                <h2>Outdoor Conditions</h2>
+                <p>Temperature: <span class="data-value">{{ data.outdoor_temp }}°C</span></p>
+                <p>Humidity: <span class="data-value">{{ data.outdoor_humidity }}%</span></p>
+                <p>Conditions: <span class="data-value">{{ data.outdoor_conditions }}</span></p>
+            </div>
+        </section>
+
+        <section class="recommendations">
+            <h2>Recommendations & Insights (Powered by Ollama)</h2>
+            <div class="recommendation-card">
+                <h3>Weather Briefing</h3>
+                <p>{{ data.llm_briefing }}</p>
+            </div>
+            <div class="recommendation-card">
+                <h3>Activity Suggestions</h3>
+                <p>{{ data.llm_activity_suggestion }}</p>
+            </div>
+            <div class="recommendation-card">
+                <h3>Clothing Recommendation</h3>
+                <p>{{ data.llm_clothing_suggestion }}</p>
+            </div>
+        </section>
+
+        <footer>
+            <p>Last updated: <span id="last-updated"></span></p>
+        </footer>
+    </div>
+
+    <script>
+        // Update the "Last updated" timestamp
+        document.getElementById('last-updated').innerText = new Date().toLocaleString();
+
+        // Show/hide error message based on content
+        const errorMessageDiv = document.getElementById('error-message');
+        if (errorMessageDiv.querySelector('p')) {
+            errorMessageDiv.style.display = 'block';
+        }
+    </script>
+</body>
+</html>

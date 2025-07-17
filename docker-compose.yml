@@ -1,5 +1,4 @@
 # docker-compose.yml
-
 services:
   ollama:
     # Use your custom Dockerfile to build the Ollama service
@@ -41,32 +40,34 @@ services:
       - mosquitto_data:/mosquitto/data
       - mosquitto_logs:/mosquitto/log
     command: mosquitto -c /mosquitto/config/mosquitto.conf
-    user: "0" # <--- ADD THIS LINE FOR TESTING PERMISSIONS
+    # user: "0" # REMOVE OR COMMENT OUT THIS LINE - ensure it's removed if you added it for testing
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "mosquitto_sub -t '$$SYS/broker/version' -C 1 || exit 1"]
-      interval: 10s
+      interval: 60s
       timeout: 5s
       retries: 5
     networks:
-      my_bridge_network:
-        ipv4_address: 172.20.0.10 # Assign a static IP address for Mosquitto
+      my_bridge_network: # Mosquitto will now get an IP from the 'my_bridge_network' pool automatically
 
   mcp_server:
-    build:
-      context: ./mcp_server
-      dockerfile: Dockerfile.mcp
+    build: ./mcp_server
     container_name: mcp_server
     ports:
       - "4000:4000"
-    # IMPORTANT: Only uncomment this if your MCP server actually makes calls to Ollama.
-    # Otherwise, it unnecessarily delays MCP server startup.
-    depends_on:
-      ollama:
-        condition: service_healthy
-    restart: unless-stopped
+    env_file:
+      - .env # <--- Make sure this line exists!
+    environment:
+      PYTHONUNBUFFERED: 1
+      OPENWEATHER_API_KEY: ${OPENWEATHER_API_KEY} # <--- Make sure this line exists!
     networks:
-      my_bridge_network: # Assign to the custom network
+      my_bridge_network: # MCP Server will now get an IP from the 'my_bridge_network' pool automatically
+    healthcheck: # Add a healthcheck for MCP Server too!
+      test: ["CMD-SHELL", "curl -f http://localhost:4000/docs || exit 1"] # Or /ping if you add one
+      interval: 60s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   adk_app:
     build:
@@ -74,14 +75,14 @@ services:
       dockerfile: Dockerfile.adk
     container_name: adk_app
     ports:
-      - "8000:8000"
+      - "8000:8000" # Expose 8000 for internal communication with dashboard
     env_file:
       - .env
     environment:
-      OLLAMA_BASE_URL: http://ollama:11434
-      MCP_SERVER_URL: http://mcp_server:4000
+      OLLAMA_BASE_URL: http://ollama:11434 # Communication by service name
+      MCP_SERVER_URL: http://mcp_server:4000 # Communication by service name
       OPENWEATHER_API_KEY: ${OPENWEATHER_API_KEY} # Ensure this is set in your .env file
-      MQTT_BROKER_HOST: 172.20.0.10 # Now use the fixed IP address
+      MQTT_BROKER_HOST: mosquitto # <--- IMPORTANT CHANGE: Use service name 'mosquitto'
       MQTT_BROKER_PORT: 1883
       PYTHONUNBUFFERED: 1
     depends_on:
@@ -90,10 +91,34 @@ services:
       mosquitto:
         condition: service_healthy
       mcp_server:
-        condition: service_started
+        condition: service_healthy
     restart: unless-stopped
     networks:
       my_bridge_network: # Assign to the custom network
+    healthcheck: # <--- ADD THIS HEALTHCHECK BLOCK
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health/ || exit 1"]
+      interval: 60s
+      timeout: 5s
+      retries: 5
+      start_period: 30s # Give it some time to fully initialize and connect to other services
+
+  dashboard_server:
+    build:
+      context: ./dashboard_server
+      dockerfile: Dockerfile.dashboard
+    container_name: dashboard_server
+    ports:
+      - "8001:8000" # Map host port 8001 to container port 8000 (assuming you changed this)
+    env_file:
+      - .env
+    environment:
+      ADK_APP_URL: http://adk_app:8000 # This is how dashboard_server finds adk_app
+    depends_on:
+      adk_app:
+        condition: service_healthy # This condition now has a healthcheck to wait for
+    restart: unless-stopped
+    networks:
+      my_bridge_network: # Join the custom network
 
 volumes:
   ollama_data:
@@ -101,11 +126,9 @@ volumes:
   mosquitto_data:
   mosquitto_logs:
 
-# Define your custom network
+# Define your custom network (no static IP config for the network itself)
 networks:
   my_bridge_network:
     driver: bridge
-    ipam:
-      config:
-        - subnet: 172.20.0.0/24 # Define the subnet for your custom network
-          gateway: 172.20.0.1 # Optional: Define a gateway for the subnet (Docker usually handles this automatically)
+    # The 'ipam' section defining specific subnet and gateway is removed.
+    # Docker will now choose a suitable subnet automatically for this bridge network.

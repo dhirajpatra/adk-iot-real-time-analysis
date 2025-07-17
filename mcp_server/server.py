@@ -4,9 +4,22 @@ import asyncio
 import json
 import time
 import random
+import os
 import uvicorn # <--- Add this import
 
+# Import WeatherAPITool from its new location
+from tools.weather_api_tool import WeatherAPITool
+
 app = FastAPI()
+
+# Initialize WeatherAPITool - Ensure API key is passed from environment
+OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY")
+if not OPENWEATHER_API_KEY:
+    # This will cause the container to fail fast if API key is missing
+    print("FATAL ERROR: OPENWEATHER_API_KEY environment variable is not set for MCP Server.")
+    exit(1) # Or raise an exception appropriate for your startup flow
+
+weather_tool = WeatherAPITool(api_key=OPENWEATHER_API_KEY)
 
 @app.get("/")
 async def read_root():

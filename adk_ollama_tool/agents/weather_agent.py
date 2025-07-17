@@ -1,88 +1,95 @@
-# adk_ollama_tool/agents/weather_agent.py
-# CORRECTED: Agent class location for google-adk v1.6.1
-from google.adk.agents.llm_agent import Agent 
-from tools.weather_api_tool import WeatherAPITool # Import the weather tool
-from typing import Any # Used as a temporary placeholder for message type hinting
-
-# IMPORTANT: MessageBuilder and Message are NOT found at this path in google-adk v1.6.1.
-# You MUST consult the google-adk v1.6.1 documentation to find the correct way
-# to build messages and handle message types for this version of the library.
-# This line is commented out. The code using MessageBuilder() and type hinting with Message
-# will need to be updated based on the new ADK API.
-# from google.adk.message import MessageBuilder, Message 
+# adk_ollama_tool/agents/weather_agent.py (Corrected)
+import httpx # Assuming you use httpx for API calls
+from google.adk.agents.llm_agent import Agent
+from google.genai.types import UserContent, ModelContent, Part
 
 class WeatherAgent(Agent):
     """
-    An agent that provides current weather data for Indian cities using a WeatherAPITool.
+    An agent that fetches real-time weather data using the OpenWeatherMap API
+    via the MCP server's weather_api_tool.
     """
-    def __init__(self, agent_id: str, weather_tool: WeatherAPITool):
-        super().__init__(name=agent_id)
-        self._weather_tool = weather_tool
-        print(f"WeatherAgent initialized with {self._weather_tool}.")
+    # IMPORTANT: Add mcp_server_url and api_key to the __init__ signature
+    def __init__(self, agent_id: str, mcp_server_url: str, api_key: str): # <--- FIX IS HERE
+        super().__init__(name=agent_id) # Call the base Agent constructor
+        self._mcp_server_url = mcp_server_url # Store these as instance variables
+        self._api_key = api_key # Store these as instance variables
+        self._client = httpx.AsyncClient() # Initialize an HTTP client for MCP calls
+        print(f"WeatherAgent '{self.name}' initialized.")
 
-    # The type hint `message: Message` will now refer to `Any` if Message is not imported.
-    # The return type `-> Message` will also refer to `Any`.
-    async def handle_message(self, message: Any): # Changed type hint from Message to Any
+    async def get_current_weather(self, city: str):
         """
-        Processes incoming ADK messages, attempting to extract a city name
-        to fetch weather data.
+        Fetches current weather data for a given city from the MCP server's weather tool.
         """
-        # CRITICAL: message.text() might not work if 'Message' class is gone.
-        # You need to find the equivalent way to access message content in ADK v1.6.1.
-        # For now, we'll assume it's still accessible this way, but be prepared to change.
-        query = message.text().lower()
-        print(f"WeatherAgent received query: '{query}' from {message.sender_id}")
+        url = f"{self._mcp_server_url}/weather?city={city}&api_key={self._api_key}"
+        try:
+            response = await self._client.get(url, timeout=10.0) # Add a timeout
+            response.raise_for_status() # Raise an HTTPError for bad responses (4xx or 5xx)
+            data = response.json()
+            # print(f"Weather data for {city}: {data}") # Debugging
+            return data
+        except httpx.HTTPStatusError as e:
+            print(f"WeatherAgent: HTTP error fetching weather for {city}: {e.response.status_code} - {e.response.text}")
+            raise Exception(f"Weather API error: {e.response.text}")
+        except httpx.RequestError as e:
+            print(f"WeatherAgent: Network error fetching weather for {city}: {e}")
+            raise Exception(f"Weather API connection error: {e}")
+        except Exception as e:
+            print(f"WeatherAgent: An unexpected error occurred fetching weather for {city}: {e}")
+            raise Exception(f"Failed to get weather data: {e}")
 
-        city = None
-        indian_cities = ["mumbai", "delhi", "bengaluru", "chennai", "kolkata", "hyderabad", "pune", "ahmedabad", "jaipur", "lucknow", "nagpur", "patna"]
-        for c in indian_cities:
-            if c in query:
-                city = c.capitalize() # Capitalize for API consistency
+    async def handle_message(self, message: UserContent, city: str = "Bengaluru") -> ModelContent:
+        """
+        Processes incoming ADK messages related to weather queries.
+        """
+        query = ""
+        for part in message.parts:
+            if hasattr(part, 'text') and part.text:
+                query = part.text.lower()
                 break
 
-        if city:
+        print(f"WeatherAgent '{self.name}' received query: '{query}' for city: '{city}' from {message.role}")
+
+        response_text = "I'm sorry, I don't understand that weather query."
+
+        if "weather in" in query or "weather for" in query or "current weather" in query:
+            # Extract city from query if present, otherwise use default
+            # (More robust city extraction might be needed for a full solution)
+            if "weather in" in query:
+                parts = query.split("weather in", 1)
+                if len(parts) > 1:
+                    city_from_query = parts[1].strip().split(" ")[0] # Takes first word after "weather in"
+                    if city_from_query:
+                        city = city_from_query.capitalize() # Capitalize for API consistency
+
             try:
-                weather_data = await self._weather_tool.get_current_weather(city)
-                if weather_data:
-                    temp = weather_data.get('main', {}).get('temp')
-                    description = weather_data.get('weather', [{}])[0].get('description')
-                    response_text = f"The current weather in {city} is {description} with a temperature of {temp}°C."
+                weather_data = await self.get_current_weather(city)
+                temp = weather_data.get("temperature", "N/A")
+                desc = weather_data.get("description", "N/A")
+                humidity = weather_data.get("humidity", "N/A")
+                
+                if temp != "N/A" and desc != "N/A":
+                    response_text = f"The current weather in {city} is {desc} with a temperature of {temp}°C and {humidity}% humidity."
                 else:
-                    response_text = f"Could not retrieve weather for {city} from the API. Please check the city name or API status."
+                    response_text = f"Could not retrieve full weather data for {city}."
             except Exception as e:
-                response_text = f"An error occurred while fetching weather for {city}: {e}"
+                response_text = f"Sorry, I couldn't get the weather for {city} right now: {e}"
+        elif "forecast for" in query:
+             response_text = f"Forecast functionality is not yet implemented for {city}."
         else:
-            response_text = "Please specify an Indian city to get weather information (e.g., 'What's the weather in Mumbai?')."
+            return None # Indicate that this agent didn't handle the message
 
-        print(f"WeatherAgent responding with: '{response_text}' to {message.sender_id}")
-        
-        # CRITICAL: MessageBuilder() will cause a NameError here.
-        # You need to find the correct way to build a response message in ADK v1.6.1.
-        # For now, this line is commented out and replaced with a placeholder return.
-        # return MessageBuilder().text_message(response_text).add_sender_id(self.id).add_recipient_id(message.sender_id).build()
-        # Placeholder return: You MUST replace this with the actual message building for ADK v1.6.1
-        # For example, it might be something like:
-        # return Agent.create_text_message(response_text, sender_id=self.id, recipient_id=message.sender_id)
-        # OR a new Message object type.
-        return {"response_text": response_text, "sender_id": self.id, "recipient_id": message.sender_id, "NOTE": "Message building needs update for ADK v1.6.1"}
+        print(f"WeatherAgent responding with: '{response_text}'")
+        return ModelContent(parts=[Part(text=response_text)])
 
-
-    async def get_response(self, request_data: dict) -> Any: # Changed return type hint from Message to Any
+    async def get_response(self, request_data: dict) -> ModelContent:
         """
         Required ADK method to get a response for direct HTTP requests.
-        Converts the request_data to a Message and passes it to handle_message.
         """
         if isinstance(request_data, dict) and "query" in request_data:
-            # CRITICAL: MessageBuilder() will cause a NameError here.
-            # You need to find the correct way to build a mock message in ADK v1.6.1.
-            # For now, using a simple dict as a mock, but this might not be compatible.
-            # mock_message = MessageBuilder().text_message(request_data["query"]).add_sender_id("adk_client_http_request").add_recipient_id(self.id).build()
-            mock_message = {"text": request_data["query"], "sender_id": "adk_client_http_request", "recipient_id": self.id}
-            
-            # handle_message expects a 'Message' type, which we've temporarily changed to 'Any'.
-            # This call might still fail if handle_message expects specific Message attributes (like .text()).
-            return await self.handle_message(mock_message)
+            city = request_data.get("city", "London") # Allow city to be passed in request_data
+            mock_message = UserContent(parts=[Part(text=request_data["query"])])
+            return await self.handle_message(mock_message, city)
         
-        # CRITICAL: MessageBuilder() will cause a NameError here.
-        # return MessageBuilder().text_message("Invalid request format to WeatherAgent").add_sender_id(self.id).add_recipient_id("unknown").build()
-        return {"error": "Invalid request format to WeatherAgent", "sender_id": self.id, "recipient_id": "unknown", "NOTE": "Message building needs update for ADK v1.6.1"}
+        return ModelContent(
+            parts=[Part(text="Invalid request format to WeatherAgent. Expects a 'query' key in dict.")]
+        )

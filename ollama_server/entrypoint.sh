@@ -20,7 +20,7 @@ echo "Ollama server is responsive."
 
 
 # Pull model if not already present
-MODEL_NAME="gemma2:2b" # Only this model will be pulled
+MODEL_NAME="gemma3:1b" # Only this model will be pulled
 
 if ! ollama list | grep -q "$MODEL_NAME"; then
   echo "Model not found. Pulling $MODEL_NAME..."
