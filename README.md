@@ -3,6 +3,12 @@
 A comprehensive multi-agent microservice application leveraging ADK (Agent Development Kit) for smart house IoT monitoring and city-wide weather analytics. This system combines Arduino-based temperature and humidity sensors with intelligent weather forecasting agents to create a complete environmental monitoring solution.
 
 ![ADK Agent Services](images/adk_services.png)
+![ADK Agent Services](images/1.png)
+![ADK Agent Services](images/2.png)
+![ADK Agent Services](images/3.png)
+![ADK Agent Services](images/4.png)
+![ADK Agent Services](images/5.png)
+![ADK Agent Services](images/6.png)
 
 This multi-agent application, combining a local Smart Home agent (Arduino-based sensors) with a cloud-connected Weather API agent (OpenWeatherMap), built on ADK and Ollama, has a strong foundation. Here are several real-world problems it can solve, ranging from immediate applications to more advanced scenarios with minor changes:
 
