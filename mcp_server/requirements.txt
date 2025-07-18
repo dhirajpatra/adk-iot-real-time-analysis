@@ -1,4 +1,7 @@
 fastapi
-uvicorn[standard]  # Uvicorn with standard extras for better performance (e.g., uvloop, httptools)
+uvicorn
+python-dotenv
+pydantic
+requests # Assuming this is used by weather_api_tool, or remove if not
 asyncio
 httpx
