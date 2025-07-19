@@ -1,4 +1,7 @@
 # mcp_server/server.py
+# Import the router
+from google_auth import router as google_auth_router
+from simple_oauth_server import router as simple_oauth_router
 import os
 import json
 import time
@@ -8,6 +11,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware # Keep this
 import httpx # For making HTTP requests to adk_app
 from dotenv import load_dotenv # Keep this
+from starlette.middleware.sessions import SessionMiddleware # Keep this for session management
 
 # Adjusted import path: It's now inside the 'tools' package within mcp_server
 from tools.weather_api_tool import WeatherAPITool
@@ -22,6 +26,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.add_middleware(SessionMiddleware, secret_key=os.getenv("SECRET_KEY"))
+
+app.include_router(google_auth_router)
+app.include_router(simple_oauth_router)
 
 # Load environment variables
 load_dotenv()
