@@ -16,6 +16,9 @@ from starlette.middleware.sessions import SessionMiddleware # Keep this for sess
 # Adjusted import path: It's now inside the 'tools' package within mcp_server
 from tools.weather_api_tool import WeatherAPITool
 
+# Import jwt from jose
+from jose import jwt, JWTError # <-- ADDED JWTError import here
+
 app = FastAPI(title="MCP Server - Multi-Agent Communication Protocol")
 
 # Add CORS middleware (already present, just ensuring it's here)
@@ -51,21 +54,58 @@ weather_tool = WeatherAPITool(api_key=OPENWEATHER_API_KEY)
 
 # --- Basic Authentication for Google Home (for development) ---
 # This token needs to be configured in Google Actions Console later
-GOOGLE_HOME_AUTH_TOKEN = os.getenv("GOOGLE_HOME_AUTH_TOKEN")
-if not GOOGLE_HOME_AUTH_TOKEN:
-    print("WARNING: GOOGLE_HOME_AUTH_TOKEN environment variable is not set. Google Home integration will not work without it.")
+# GOOGLE_HOME_AUTH_TOKEN is now effectively unused for OAuth-based fulfillment,
+# but it might be used for direct testing of fulfillment URLs if you configure it.
+# For now, we rely on the JWT access token issued by simple_oauth_server.
+# GOOGLE_HOME_AUTH_TOKEN = os.getenv("GOOGLE_HOME_AUTH_TOKEN")
+# if not GOOGLE_HOME_AUTH_TOKEN:
+#     print("WARNING: GOOGLE_HOME_AUTH_TOKEN environment variable is not set. Google Home integration will not work without it.")
 
 security = HTTPBearer()
 
+# IMPORTANT: Get ACCESS_TOKEN_SECRET from the environment
+ACCESS_TOKEN_SECRET = os.getenv('SECRET_KEY') # Assuming SECRET_KEY is used for JWT signing
+if not ACCESS_TOKEN_SECRET:
+    raise ValueError("FATAL ERROR: SECRET_KEY environment variable is not set. Cannot validate JWT tokens.")
+
+
 async def verify_google_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    if credentials.scheme != "Bearer" or credentials.credentials != GOOGLE_HOME_AUTH_TOKEN:
-        print(f"Authentication failed. Scheme: {credentials.scheme}, Token: {credentials.credentials}")
+    # print(f"Authentication attempt. Scheme: {credentials.scheme}, Token: {credentials.credentials}") # Uncomment for debugging
+    if credentials.scheme != "Bearer":
+        print(f"Authentication failed. Invalid scheme: {credentials.scheme}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authentication credentials",
+            detail="Invalid authentication scheme",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    return True
+    
+    token = credentials.credentials # This is the JWT access token from Google
+    
+    try:
+        # Decode and validate the JWT using your secret key
+        payload = jwt.decode(token, ACCESS_TOKEN_SECRET, algorithms=["HS256"])
+        
+        # You might want to add more checks here, e.g.,
+        # - check 'sub' (subject) to ensure it's a valid user ID (e.g., "user123")
+        # - check 'exp' (expiration time) is handled by jwt.decode
+        
+        print(f"Token successfully decoded. User: {payload.get('sub')}")
+        return True # Token is valid
+        
+    except JWTError as e: # <-- Catch JWTError specifically
+        print(f"JWT validation failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    except Exception as e:
+        print(f"An unexpected error occurred during token verification: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error during authentication",
+        )
+
 
 # --- Existing API Endpoints ---
 
@@ -108,7 +148,7 @@ async def get_current_weather_endpoint(city: str):
         "humidity": humidity,
         "description": weather_info,
         "pressure": pressure,
-        "wind_speed": wind_speed,
+        "wind_speed": wind_data.get("speed"), # Corrected from wind_speed to wind_data.get("speed") for consistency
         "country": sys_data.get("country")
     }
     print(f"MCP Server: Successfully prepared current weather data for {city}.")

@@ -6,3 +6,6 @@ requests # Assuming this is used by weather_api_tool, or remove if not
 asyncio
 httpx
 authlib
+python-jose
+python-multipart
+itsdangerous

@@ -3,7 +3,6 @@
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import RedirectResponse, JSONResponse
 from authlib.integrations.starlette_client import OAuth, OAuthError
-from starlette.middleware.sessions import SessionMiddleware
 import os
 from dotenv import load_dotenv
 

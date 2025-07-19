@@ -112,7 +112,7 @@ class WeatherAgent(Agent):
 
     async def get_response(self, request_data: dict) -> ModelContent:
         if isinstance(request_data, dict) and "query" in request_data:
-            city = request_data.get("city", "London") # Default city for direct requests
+            city = request_data.get("city", "Bengaluru") # Default city for direct requests
             mock_message = UserContent(parts=[Part(text=request_data["query"])])
             return await self.handle_message(mock_message, city)
         
