@@ -16,6 +16,21 @@ A comprehensive multi-agent microservice application leveraging ADK (Agent Devel
 ![ADK Agent Services](images/6.png)
 ![ADK Agent Services](images/7.png)
 
+Google Home App
+   ↓
+POST /google_home/fulfillment
+   ↓
+handle_query_intent() — server.py
+   ↓
+httpx GET → ADK_APP_URL/get_indoor_status/
+   ↓
+@app.get("/get_indoor_status/") — app.py
+   ↓
+returns smart_home_agent._state
+   ↓
+smart_home_agent.py → populated via MQTT topic smarthome/arduino/humidity
+
+
 This multi-agent application, combining a local Smart Home agent (Arduino-based sensors) with a cloud-connected Weather API agent (OpenWeatherMap), built on ADK and Ollama, has a strong foundation. Here are several real-world problems it can solve, ranging from immediate applications to more advanced scenarios with minor changes:
 
 ## Real-Life Problems Solvable by Your Current/Slightly Modified Application:

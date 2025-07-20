@@ -245,7 +245,7 @@ async def handle_sync_intent():
             "type": "action.devices.types.SENSOR", # Or THERMOSTAT for more features if controllable
             "traits": ["action.devices.traits.TemperatureSetting"], # Use TemperatureSetting for read-only temp
             "name": {
-                "defaultNames": ["My Indoor Temperature Sensor"],
+                "defaultNames": ["My Home Indoor Temperature Sensor"],
                 "name": "Indoor Temperature",
                 "nicknames": ["room temp", "inside temp"]
             },
@@ -269,9 +269,9 @@ async def handle_sync_intent():
                 "action.devices.traits.HumiditySetting"  # <--- CHANGED THIS TRAIT
             ],
             "name": {
-                "defaultNames": ["My Indoor Humidity Sensor"],
-                "name": "Indoor Humidity",
-                "nicknames": ["room humidity", "inside humidity"]
+                "defaultNames": ["My Home Indoor Humidity Sensor"],
+                "name": "Room Humidity",
+                "nicknames": ["indoor humidity", "inside humidity"]
             },
             "deviceInfo": {
                 "manufacturer": "ADK IoT",

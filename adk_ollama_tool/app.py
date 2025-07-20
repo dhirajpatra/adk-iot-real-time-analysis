@@ -87,7 +87,7 @@ async def get_indoor_status():
     return smart_home_agent._state
 
 @app.get("/get_outdoor_status/")
-async def get_outdoor_status(city: str = "London"):
+async def get_outdoor_status(city: str = "Bengaluru"):
     try:
         current_weather = await weather_agent.get_current_weather(city)
         return current_weather
@@ -95,7 +95,7 @@ async def get_outdoor_status(city: str = "London"):
         raise HTTPException(status_code=500, detail=f"Failed to get outdoor weather: {e}")
 
 @app.get("/get_dashboard_data/")
-async def get_dashboard_data(city: str = "London"):
+async def get_dashboard_data(city: str = "Bengaluru"):
     try:
         indoor_data = smart_home_agent._state
         outdoor_data = await weather_agent.get_current_weather(city)

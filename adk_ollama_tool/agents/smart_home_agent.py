@@ -7,6 +7,7 @@ from google.adk.agents.llm_agent import Agent
 from typing import Any # Still good to keep 'Any' for flexibility if needed elsewhere
 from google.genai.types import UserContent, ModelContent, Part # Corrected import for Part
 
+
 class SmartHomeAgent(Agent):
     """
     A simple agent that simulates smart home data and responds to queries about its state,
