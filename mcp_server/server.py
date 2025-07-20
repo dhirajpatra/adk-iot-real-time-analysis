@@ -257,7 +257,6 @@ async def handle_sync_intent():
             },
             "attributes": {
                 "thermostatTemperatureUnit": "CELSIUS",
-                "bufferUnderrunThreshold": 0.5, # Smallest amount change for reporting state
                 "queryOnlyTemperatureSetting": True # Indicates it's a read-only sensor
             },
             "willReportState": True,
@@ -266,7 +265,9 @@ async def handle_sync_intent():
         {
             "id": "indoor-humidity",
             "type": "action.devices.types.SENSOR",
-            "traits": ["action.devices.traits.HumiditySensor"],
+            "traits": [
+                "action.devices.traits.HumiditySetting"  # <--- CHANGED THIS TRAIT
+            ],
             "name": {
                 "defaultNames": ["My Indoor Humidity Sensor"],
                 "name": "Indoor Humidity",
@@ -277,6 +278,9 @@ async def handle_sync_intent():
                 "model": "SmartHome",
                 "hwVersion": "1.0",
                 "swVersion": "1.0"
+            },
+            "attributes": {  # <--- ADDED THIS ATTRIBUTES BLOCK
+                "queryOnlyHumiditySetting": True
             },
             "willReportState": True,
             "roomHint": "Living Room"
@@ -298,7 +302,6 @@ async def handle_sync_intent():
             },
             "attributes": {
                 "thermostatTemperatureUnit": "CELSIUS",
-                "bufferUnderrunThreshold": 0.5,
                 "queryOnlyTemperatureSetting": True
             },
             "willReportState": True,
@@ -307,11 +310,13 @@ async def handle_sync_intent():
         {
             "id": "outdoor-humidity",
             "type": "action.devices.types.SENSOR",
-            "traits": ["action.devices.traits.HumiditySensor"],
+            "traits": [
+                "action.devices.traits.HumiditySetting"  # <--- CHANGED THIS TRAIT
+            ],
             "name": {
                 "defaultNames": ["My Outdoor Humidity Sensor"],
                 "name": "Outdoor Humidity",
-                "nicknames": ["outside humidity", "weather humidity"]
+                "nicknames": ["outdoor humidity", "outside humidity"]
             },
             "deviceInfo": {
                 "manufacturer": "ADK IoT",
@@ -319,9 +324,12 @@ async def handle_sync_intent():
                 "hwVersion": "1.0",
                 "swVersion": "1.0"
             },
+            "attributes": {  # <--- ADDED THIS ATTRIBUTES BLOCK
+                "queryOnlyHumiditySetting": True
+            },
             "willReportState": True,
             "roomHint": "Outside"
-        }
+        },
     ]
     return {"agentUserId": "adk_user_123", "devices": devices} # Use a fixed user ID for testing
 
@@ -393,6 +401,7 @@ async def handle_query_intent(devices_to_query: list):
         states[device_id] = current_state
 
     return {"agentUserId": "adk_user_123", "devices": states}
+
 
 # Moved uvicorn.run to a standard if __name__ block
 if __name__ == "__main__":

@@ -101,7 +101,7 @@ services:
       interval: 60s
       timeout: 5s
       retries: 5
-      start_period: 60s # Give it some time to fully initialize and connect to other services
+      start_period: 30s # Give it some time to fully initialize and connect to other services
 
   dashboard_server:
     build:

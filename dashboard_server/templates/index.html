@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Smart Home ADK Dashboard</title>
     <link rel="stylesheet" href="{{ url_for('static', path='/style.css') }}">
+    <link rel="stylesheet" href="/static/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;700&display=swap" rel="stylesheet">
     <link rel="icon" type="image/x-icon" href="{{ url_for('static', path='/favicon.ico') }}">
     <script>
@@ -45,15 +46,15 @@
             <h2>Recommendations & Insights (Powered by Ollama)</h2>
             <div class="recommendation-card">
                 <h3>Weather Briefing</h3>
-                <p>{{ data.llm_briefing }}</p>
+                <p>{{ data.llm_briefing | markdown | safe }}</p>
             </div>
             <div class="recommendation-card">
                 <h3>Activity Suggestions</h3>
-                <p>{{ data.llm_activity_suggestion }}</p>
+                <p>{{ data.llm_activity_suggestion | markdown | safe }}</p>
             </div>
             <div class="recommendation-card">
                 <h3>Clothing Recommendation</h3>
-                <p>{{ data.llm_clothing_suggestion }}</p>
+                <p>{{ data.llm_clothing_suggestion | markdown | safe }}</p>
             </div>
         </section>
 

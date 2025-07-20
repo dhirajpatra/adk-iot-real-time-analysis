@@ -7,6 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 import httpx # For making HTTP requests to other services
 import asyncio # For async HTTP requests
+import markdown
 from fastapi.middleware.cors import CORSMiddleware
 
 # Load environment variables from .env file
@@ -24,6 +25,9 @@ app.add_middleware(
 
 # Configure Jinja2 templates directory
 templates = Jinja2Templates(directory="templates")
+
+# Add custom 'markdown' filter to Jinja2 environment
+templates.env.filters["markdown"] = lambda text: markdown.markdown(text)
 
 # Mount static files directory (for CSS, JS, images)
 app.mount("/static", StaticFiles(directory="static"), name="static")
