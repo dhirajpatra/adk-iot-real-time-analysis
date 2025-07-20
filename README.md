@@ -2,7 +2,7 @@
 
 A comprehensive multi-agent microservice application leveraging ADK (Agent Development Kit) for smart house IoT monitoring and city-wide weather analytics. This system combines Arduino-based temperature and humidity sensors with intelligent weather forecasting agents to create a complete environmental monitoring solution.
 
-<iframe width="560" height="315" src="https://www.youtube.com/embed/a23dj6KWT60?si=9Q6BnLuA0oY14IBq" frameborder="0" allowfullscreen></iframe>
+[Google Home Smart Home Devices Video](https://youtu.be/a23dj6KWT60?si=9Q6BnLuA0oY14IBq)
 
 ![Google Home Smart Home Devices](images/gh1.jpeg)
 ![Google Home Smart Home Devices](images/gh2.jpeg)
