@@ -119,23 +119,25 @@ This application consists of multiple specialized agents working together to pro
 ### Multi-Agent Architecture
 
 ```
+
 ┌─────────────────┐    ┌─────────────────┐
 │   IoT Agent     │    │ Weather Agent   │
 │ (Arduino Data)  │    │ (City Weather)  │
 └─────────────────┘    └─────────────────┘
-         │                       │
-         └───────────┬───────────┘
-                     │
-         ┌─────────────────┐
-         │  API Gateway    │
-         │ (Coordination)  │
-         └─────────────────┘
-                     │
-         ┌─────────────────┐
-         │   Dashboard     │
-         │ (Visualization) │
-         └─────────────────┘
-```
+│                       │
+└───────────┬───────────┘
+│
+┌─────────────────┐
+│  API Gateway    │
+│ (Coordination)  │
+└─────────────────┘
+│
+┌─────────────────┐
+│   Dashboard     │
+│ (Visualization) │
+└─────────────────┘
+
+````
 * Correct architecture diaggram
 
 ![Architecture](images/architecture.jpg)
@@ -159,64 +161,70 @@ This application consists of multiple specialized agents working together to pro
    ```bash
    git clone <repository-url>
    cd adk-smart-house
-   ```
+````
 
-2. **Set up environment variables**
-   ```bash
-   cp .env.example .env
-   # Edit .env and add your WEATHER_API_KEY
-   ```
+2.  **Set up environment variables**
 
-3. **Build and start services**
-   ```bash
-   docker-compose up -d
-   ```
+    ```bash
+    cp .env.example .env
+    # Edit .env and add your WEATHER_API_KEY
+    ```
 
-4. **Initialize Ollama models**
-   ```bash
-   # Models will be automatically pulled via ollama-init service
-   # Wait for initialization to complete
+3.  **Build and start services**
 
-   # Option 1: If Ollama is installed on your host
-   ollama pull gemma3:1b
+    ```bash
+    docker-compose up -d
+    ```
 
-   # Option 2: Run Ollama service only, then exec into it to pull
-   docker compose up -d ollama
-   docker exec -it ollama ollama pull gemma3:1b
-   # Then stop ollama and run the full stack
-   docker compose down ollama
-   ```
+4.  **Initialize Ollama models**
+
+    ```bash
+    # Models will be automatically pulled via ollama-init service
+    # Wait for initialization to complete
+
+    # Option 1: If Ollama is installed on your host
+    ollama pull gemma3:1b
+
+    # Option 2: Run Ollama service only, then exec into it to pull
+    docker compose up -d ollama
+    docker exec -it ollama ollama pull gemma3:1b
+    # Then stop ollama and run the full stack
+    docker compose down ollama
+    ```
 
 ### Service Endpoints
 
-- **Dashboard**: http://localhost:3000
-- **API Gateway**: http://localhost:8000
-- **IoT Agent**: http://localhost:8001
-- **Weather Agent**: http://localhost:8002
-- **Ollama**: http://localhost:11434
+  - **Dashboard**: http://localhost:3000
+  - **API Gateway**: http://localhost:8000
+  - **IoT Agent**: http://localhost:8001
+  - **Weather Agent**: http://localhost:8002
+  - **Ollama**: http://localhost:11434
 
 ## 📊 Agent Capabilities
 
 ### IoT Agent (Smart House)
-- **Temperature Monitoring**: Real-time Arduino sensor data processing
-- **Humidity Tracking**: Environmental humidity analysis
-- **Sensor Health**: Device status and connectivity monitoring
-- **Data Validation**: Intelligent filtering and anomaly detection
-- **Historical Analysis**: Trend identification and pattern recognition
+
+  - **Temperature Monitoring**: Real-time Arduino sensor data processing
+  - **Humidity Tracking**: Environmental humidity analysis
+  - **Sensor Health**: Device status and connectivity monitoring
+  - **Data Validation**: Intelligent filtering and anomaly detection
+  - **Historical Analysis**: Trend identification and pattern recognition
 
 ### Weather Agent (City-Wide)
-- **Weather Forecasting**: Multi-day weather predictions
-- **Climate Analysis**: Long-term weather pattern analysis
-- **Alert System**: Severe weather notifications
-- **Data Integration**: Multiple weather data source aggregation
-- **Urban Analytics**: City-specific weather insights
+
+  - **Weather Forecasting**: Multi-day weather predictions
+  - **Climate Analysis**: Long-term weather pattern analysis
+  - **Alert System**: Severe weather notifications
+  - **Data Integration**: Multiple weather data source aggregation
+  - **Urban Analytics**: City-specific weather insights
 
 ### API Gateway
-- **Request Routing**: Intelligent routing between agents
-- **Load Balancing**: Distributed request handling
-- **Authentication**: Secure agent communication
-- **Rate Limiting**: Resource protection and optimization
-- **Monitoring**: Health checks and performance metrics
+
+  - **Request Routing**: Intelligent routing between agents
+  - **Load Balancing**: Distributed request handling
+  - **Authentication**: Secure agent communication
+  - **Rate Limiting**: Resource protection and optimization
+  - **Monitoring**: Health checks and performance metrics
 
 ## 🔧 Configuration
 
@@ -239,26 +247,129 @@ WEATHER_AGENT_URL=http://weather-agent:8000
 
 ### Arduino Sensor Setup
 
-[(Get from my blog) !https://dhirajpatra.blogspot.com/2023/08/iot-real-time-data-analysis.html?q=iot+real+time]
+[(Get from my blog) \!https://dhirajpatra.blogspot.com/2023/08/iot-real-time-data-analysis.html?q=iot+real+time]
 
-1. **Hardware Requirements**:
-   - Arduino Uno/Nano/ESP32
-   - DHT22 or DHT11 temperature/humidity sensor
-   - WiFi module (for ESP32) or Ethernet shield
+1.  **Hardware Requirements**:
 
-2. **Sensor Wiring**:
-   ```
-   DHT22 VCC  -> Arduino 5V
-   DHT22 GND  -> Arduino GND
-   DHT22 DATA -> Arduino Pin 2
-   ```
+      - Arduino Uno/Nano/ESP32
+      - DHT22 or DHT11 temperature/humidity sensor
+      - WiFi module (for ESP32) or Ethernet shield
 
-3. **Arduino Code**:
-   ```cpp
-   // Upload the provided Arduino sketch
-   // Configure WiFi credentials
-   // Set IoT Agent endpoint URL
-   ```
+2.  **Sensor Wiring**:
+
+    ```
+    DHT22 VCC  -> Arduino 5V
+    DHT22 GND  -> Arduino GND
+    DHT22 DATA -> Arduino Pin 2
+    ```
+
+3.  **Arduino Code**:
+
+    ```cpp
+    // Upload the provided Arduino sketch
+    // Configure WiFi credentials
+    // Set IoT Agent endpoint URL
+    ```
+
+## 🌐 Google Home Integration
+
+To enable seamless integration with Google Home, including automatic state reporting (`REPORT_STATE`), follow these steps:
+
+### 1\. Google Cloud Project Setup
+
+1.  **Create a Google Cloud Project**:
+
+      * Go to the [Google Cloud Console](https://console.cloud.google.com/) and create a new project.
+      * Note your **Project ID**. You'll need it for various configurations (e.g., `GOOGLE_CLOUD_PROJECT_ID` in `.env`).
+
+2.  **Enable Required APIs**:
+
+      * In your Google Cloud project, navigate to `APIs & Services` \> `Enabled APIs & Services`.
+      * Enable the following APIs:
+          * **Google HomeGraph API**: Essential for `REPORT_STATE` to push device states to Google Home.
+          * **Google Assistant API**: Used for interacting with Google Assistant (though primarily handled by Google Actions).
+
+### 2\. OAuth 2.0 Client ID for Account Linking
+
+This allows Google Home to securely link a user's Google account to your smart home system.
+
+1.  **Create OAuth Consent Screen**:
+
+      * In the Google Cloud Console, go to `APIs & Services` \> `OAuth consent screen`.
+      * Configure your consent screen (e.g., set application name, user support email). For testing, "External" user type is sufficient.
+
+2.  **Create OAuth Client ID**:
+
+      * Go to `APIs & Services` \> `Credentials`.
+      * Click `+ CREATE CREDENTIALS` \> `OAuth client ID`.
+      * Select `Web application`.
+      * **Authorized JavaScript origins**: Add the base URL of your OAuth server (e.g., `https://your-ngrok-url.ngrok-free.app` or `http://localhost:4000`).
+      * **Authorized redirect URIs**: Add the Google Home OAuth redirect URI. This is typically `https://oauth-redirect.googleusercontent.com/r/YOUR_PROJECT_ID`. Make sure to replace `YOUR_PROJECT_ID` with your actual Google Cloud Project ID.
+      * Also add your local redirect URI if testing locally (e.g., `http://localhost:4000/auth/google/callback`).
+      * Note down your **Client ID** (`CLIENT_ID` in `.env`) and **Client Secret** (`CLIENT_SECRET` in `.env`).
+
+### 3\. Google Home Actions Project Registration
+
+This registers your smart home service with Google Home.
+
+1.  **Create a Google Actions Project**:
+
+      * Go to the [Google Actions Console](https://console.actions.google.com/).
+      * Create a new project and select the "Smart Home" category.
+      * Link this Actions project to your Google Cloud Project ID.
+
+2.  **Develop & Test \> Account Linking**:
+
+      * In the Actions Console, navigate to `Develop` \> `Account linking`.
+      * **Client Information**:
+          * **Client ID (from your cloud project)**: Enter the `CLIENT_ID` you obtained earlier.
+          * **Client secret (from your cloud project)**: Enter the `CLIENT_SECRET` you obtained earlier.
+          * **Authorization URL**: Your OAuth authorization endpoint (e.g., `https://your-ngrok-url.ngrok-free.app/oauth/auth`).
+          * **Token URL**: Your OAuth token exchange endpoint (e.g., `https://your-ngrok-url.ngrok-free.app/oauth/token`).
+      * **Configure your OAuth flow** (Authorization Code flow).
+
+3.  **Develop & Test \> Actions**:
+
+      * **Fulfillment URL**: Set this to your `mcp_server`'s Google Home fulfillment endpoint (e.g., `https://your-ngrok-url.ngrok-free.app/google_home/fulfillment`).
+
+4.  **Test Your Integration**:
+
+      * In the Actions Console, go to `Test` tab.
+      * Enable "On device testing".
+      * Open the Google Home app on your phone, go to `+ Add` \> `Set up device` \> `Works with Google`.
+      * Search for your integration name (the name you set in Actions Console) and proceed with account linking. This should use your OAuth server.
+      * After successful linking, your devices should appear. Perform a SYNC request if they don't appear immediately.
+
+### 4\. Enabling Report State
+
+`REPORT_STATE` is crucial for automatic updates of device states in the Google Home app dashboard.
+
+1.  **`willReportState` in SYNC response**:
+
+      * [cite\_start]Ensure your `handle_sync_intent` function in `server.py` sets `"willReportState": True` for all devices that will actively push state updates. [cite: 1]
+      * *Example from `server.py`*:
+        ```json
+        {
+            "id": "indoor-humidity",
+            "type": "action.devices.types.SENSOR",
+            "traits": ["action.devices.traits.HumiditySetting"],
+            "name": { ... },
+            "attributes": { "queryOnlyHumiditySetting": True },
+            "willReportState": True, // This enables Report State
+            "roomHint": "Living Room"
+        }
+        ```
+
+2.  **Service Account for HomeGraph API Calls**:
+
+      * `REPORT_STATE` calls to Google HomeGraph API require an access token obtained via a Google Cloud **Service Account**.
+      * In Google Cloud Console, go to `IAM & Admin` \> `Service Accounts`.
+      * Create a new service account.
+      * Grant it the **HomeGraph API Service Agent** role.
+      * Create a new JSON key for this service account and save it securely (e.g., as `google_home_sa_key.json`). You'll use this key in your `mcp_server` to generate access tokens for `REPORT_STATE` calls.
+      * [cite\_start]The `send_report_state_update` function in `server.py` is responsible for fetching the latest data from your `adk_app` and then sending it to Google Home's Report State API endpoint (`https://homegraph.googleapis.com/v1/devices:reportState`). [cite: 1]
+      * [cite\_start]Ensure your `mcp_server` periodically calls `send_report_state_update` (e.g., via an `asyncio.create_task` on startup as seen in `server.py` to trigger updates every 60 seconds). [cite: 1]
+      * The `access_token` for `REPORT_STATE` calls should be generated using the service account credentials, not the OAuth access token.
 
 ## 🛠️ Development
 
@@ -291,29 +402,32 @@ adk-smart-house/
 
 ### Adding New Agents
 
-1. **Create Agent Directory**
-   ```bash
-   mkdir new-agent
-   cd new-agent
-   ```
+1.  **Create Agent Directory**
 
-2. **Implement Agent Logic**
-   ```python
-   # Follow the existing agent patterns
-   # Implement health checks
-   # Add error handling
-   ```
+    ```bash
+    mkdir new-agent
+    cd new-agent
+    ```
 
-3. **Update Docker Compose**
-   ```yaml
-   new-agent:
-     build:
-       context: ./new-agent
-     ports:
-       - "8003:8000"
-     depends_on:
-       - ollama
-   ```
+2.  **Implement Agent Logic**
+
+    ```python
+    # Follow the existing agent patterns
+    # Implement health checks
+    # Add error handling
+    ```
+
+3.  **Update Docker Compose**
+
+    ```yaml
+    new-agent:
+      build:
+        context: ./new-agent
+      ports:
+        - "8003:8000"
+      depends_on:
+        - ollama
+    ```
 
 ### Local Development
 
@@ -333,10 +447,10 @@ python app.py
 
 ### Health Endpoints
 
-- **IoT Agent**: `GET /health`
-- **Weather Agent**: `GET /health`
-- **API Gateway**: `GET /health`
-- **Ollama**: `GET /api/tags`
+  - **IoT Agent**: `GET /health`
+  - **Weather Agent**: `GET /health`
+  - **API Gateway**: `GET /health`
+  - **Ollama**: `GET /api/tags`
 
 ### Monitoring Dashboard
 
@@ -350,16 +464,16 @@ docker-compose logs -f
 
 # View specific service logs
 docker-compose logs -f iot-agent
-docker-compose logs -f weather-agent
+docker-compose logs -f f weather-agent
 ```
 
 ## 🔒 Security Considerations
 
-- **API Authentication**: Implement JWT tokens for production
-- **Network Security**: Use Docker networks for service isolation
-- **Data Encryption**: Enable TLS for external communications
-- **Environment Variables**: Never commit sensitive data to version control
-- **Resource Limits**: Configure appropriate memory and CPU limits
+  - **API Authentication**: Implement JWT tokens for production
+  - **Network Security**: Use Docker networks for service isolation
+  - **Data Encryption**: Enable TLS for external communications
+  - **Environment Variables**: Never commit sensitive data to version control
+  - **Resource Limits**: Configure appropriate memory and CPU limits
 
 ## 📚 API Documentation
 
@@ -393,38 +507,41 @@ GET  /agent-health     # All agent health status
 
 ### Common Issues
 
-1. **Ollama Model Loading**
-   ```bash
-   # Check if models are loaded
-   curl http://localhost:11434/api/tags
-   
-   # Manually pull models
-   docker exec ollama ollama pull gemma3:1b
-   ```
+1.  **Ollama Model Loading**
 
-2. **Agent Communication**
-   ```bash
-   # Test agent connectivity
-   curl http://localhost:8001/health
-   curl http://localhost:8002/health
-   ```
+    ```bash
+    # Check if models are loaded
+    curl http://localhost:11434/api/tags
 
-3. **Database Connection**
-   ```bash
-   # Check PostgreSQL status
-   docker-compose logs postgres
-   
-   # Connect to database
-   docker exec -it postgres psql -U adk_user -d adk_agents
-   ```
+    # Manually pull models
+    docker exec ollama ollama pull gemma3:1b
+    ```
+
+2.  **Agent Communication**
+
+    ```bash
+    # Test agent connectivity
+    curl http://localhost:8001/health
+    curl http://localhost:8002/health
+    ```
+
+3.  **Database Connection**
+
+    ```bash
+    # Check PostgreSQL status
+    docker-compose logs postgres
+
+    # Connect to database
+    docker exec -it postgres psql -U adk_user -d adk_agents
+    ```
 
 ## 🤝 Contributing
 
-1. Fork the repository
-2. Create a feature branch
-3. Implement your changes
-4. Add tests and documentation
-5. Submit a pull request
+1.  Fork the repository
+2.  Create a feature branch
+3.  Implement your changes
+4.  Add tests and documentation
+5.  Submit a pull request
 
 ## 📄 License
 
@@ -432,11 +549,11 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ## 🙏 Acknowledgments
 
-- ADK (Agent Development Kit) team
-- Ollama project for local LLM capabilities
-- Arduino community for IoT sensor integration
-- Weather API providers for meteorological data
+  - ADK (Agent Development Kit) team
+  - Ollama project for local LLM capabilities
+  - Arduino community for IoT sensor integration
+  - Weather API providers for meteorological data
 
----
+-----
 
 **Note**: This is a development environment setup. For production deployment, additional security measures, monitoring, and scaling considerations should be implemented.
