@@ -5,6 +5,7 @@ A comprehensive multi-agent microservice application leveraging ADK (Agent Devel
 ![Google Home Smart Home Devices](images/gh1.jpeg)
 ![Google Home Smart Home Devices](images/gh2.jpeg)
 ![IoT Sensors with Arduino](images/iot1.png)
+![IoT Sensors with Arduino](images/iot2.jpeg)
 ![ADK Agent Services](images/8.png)
 ![ADK Agent Services](images/9.png)
 ![ADK Agent Services](images/adk_services.png)

@@ -19,6 +19,8 @@ from tools.weather_api_tool import WeatherAPITool
 # Import jwt from jose
 from jose import jwt, JWTError # <-- ADDED JWTError import here
 
+GOOGLE_HOME_REPORT_STATE_URL = "https://homegraph.googleapis.com/v1/devices:reportState"
+
 app = FastAPI(title="MCP Server - Multi-Agent Communication Protocol")
 
 # Add CORS middleware (already present, just ensuring it's here)
@@ -269,8 +271,8 @@ async def handle_sync_intent():
                 "action.devices.traits.HumiditySetting"  # <--- CHANGED THIS TRAIT
             ],
             "name": {
-                "defaultNames": ["My Home Indoor Humidity Sensor"],
-                "name": "Room Humidity",
+                "defaultNames": ["My Indoor Humidity Sensor"],
+                "name": "Indoor Humidity",
                 "nicknames": ["indoor humidity", "inside humidity"]
             },
             "deviceInfo": {
@@ -402,6 +404,81 @@ async def handle_query_intent(devices_to_query: list):
 
     return {"agentUserId": "adk_user_123", "devices": states}
 
+# This function would be called periodically
+async def send_report_state_update(access_token: str):
+    print("Starting periodic Report State check...") # This is the log I was looking for!
+
+    # 1. Fetch latest indoor data
+    indoor_data = {}
+    try:
+        response = await adk_app_client.get(f"{ADK_APP_URL}/get_indoor_status/", timeout=5.0)
+        response.raise_for_status()
+        indoor_data = response.json()
+        print(f"DEBUG: Fetched indoor data for Report State: {indoor_data}") # Add this for debugging
+    except Exception as e:
+        print(f"Error fetching indoor status for Report State: {e}")
+        return # Skip if data can't be fetched
+
+    # 2. Fetch latest outdoor data (similar to handle_query_intent)
+    outdoor_data = {}
+    try:
+        outdoor_data_raw = await weather_tool.get_current_weather_2_5("Bengaluru")
+        if outdoor_data_raw:
+            outdoor_data = {
+                "temperature": outdoor_data_raw["main"]["temp"],
+                "humidity": outdoor_data_raw["main"]["humidity"],
+                "description": outdoor_data_raw["weather"][0]["description"]
+            }
+            print(f"DEBUG: Fetched outdoor data for Report State: {outdoor_data}")
+    except Exception as e:
+        print(f"Error fetching outdoor status for Report State: {e}")
+        return
+
+    # 3. Construct the report state payload
+    payload = {
+        "agentUserId": "adk_user_123", # Must match the ID from SYNC
+        "payload": {
+            "devices": {
+                "states": {
+                    "indoor-humidity": {
+                        "online": True,
+                        "humidityAmbientPercent": float(indoor_data.get("humidity", 0.0))
+                    },
+                    "indoor-temperature": {
+                        "online": True,
+                        "thermostatTemperatureAmbient": float(indoor_data.get("temperature", 0.0))
+                    },
+                    "outdoor-humidity": {
+                        "online": True,
+                        "humidityAmbientPercent": float(outdoor_data.get("humidity", 0.0))
+                    },
+                    "outdoor-temperature": {
+                        "online": True,
+                        "thermostatTemperatureAmbient": float(outdoor_data.get("temperature", 0.0))
+                    }
+                }
+            }
+        }
+    }
+    print(f"Sending Report State payload: {json.dumps(payload, indent=2)}") # This is another log I was looking for!
+
+    # 4. Send to Google Home Report State API
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                GOOGLE_HOME_REPORT_STATE_URL,
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {access_token}" # Requires a valid access token
+                },
+                json=payload
+            )
+            response.raise_for_status() # Raises an exception for 4xx/5xx responses
+            print(f"Report State successful! Response: {response.json()}")
+    except httpx.HTTPStatusError as e:
+        print(f"Report State failed: HTTP error {e.response.status_code} - {e.response.text}")
+    except Exception as e:
+        print(f"An error occurred during Report State: {e}")
 
 # Moved uvicorn.run to a standard if __name__ block
 if __name__ == "__main__":
