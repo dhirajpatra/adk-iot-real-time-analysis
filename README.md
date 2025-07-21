@@ -126,18 +126,18 @@ This application consists of multiple specialized agents working together to pro
 │   IoT Agent     │    │ Weather Agent   │
 │ (Arduino Data)  │    │ (City Weather)  │
 └─────────────────┘    └─────────────────┘
-│                       │
-└───────────┬───────────┘
-│
-┌─────────────────┐
-│  API Gateway    │
-│ (Coordination)  │
-└─────────────────┘
-│
-┌─────────────────┐
-│   Dashboard     │
-│ (Visualization) │
-└─────────────────┘
+        │                       │
+        └───────────┬───────────┘
+                    │
+            ┌─────────────────┐
+            │  API Gateway    │
+            │ (Coordination)  │
+            └─────────────────┘
+                    │
+            ┌─────────────────┐
+            │   Dashboard     │
+            │ (Visualization) │
+            └─────────────────┘
 
 ````
 * Correct architecture diaggram
